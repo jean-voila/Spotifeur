@@ -1,0 +1,149 @@
+{
+  "evidence_id": "ev_8987e742a0acd2a30692683c55b4ccacc0a6da478f2da5e2e04c1a6f3c40a695",
+  "subject": {
+    "name": "dex11-projection.apk",
+    "digest": {
+      "sha256": "c5d8445d1f9d64c286097a85a1f93f1e0f7fdca32906f40f9498d2ff4e876f5b"
+    },
+    "local_path": "/private/tmp/spotifeur-catalog/dex11-projection.apk",
+    "format": "apk",
+    "architecture": null
+  },
+  "provider": {
+    "id": "jadx",
+    "name": "JADX headless",
+    "version": "0.7.1"
+  },
+  "analysis_profile": null,
+  "predicate_type": "rea.analysis",
+  "operation": "inspect_android_method",
+  "parameters": {
+    "path": "/tmp/spotifeur-catalog/dex11-projection.apk",
+    "class_name": "p.rd51",
+    "method_name": "a"
+  },
+  "raw_result": {
+    "server": {
+      "name": "rea-jadx-bridge",
+      "version": "4"
+    },
+    "bridge_sha256": "a02b1ef0a4a40abd1ae310b9ee686ca163e0b59a3256df524c35b90ed17e9e63",
+    "jar_sha256": "6e5eacf500b64292bfb73c49797c1958f6ee44646e43e868039ae7feb573ff75",
+    "loaded": {
+      "state": "LOADED",
+      "apk_path": "/var/folders/3l/9_bz5rn91nb23fkjstgwyh3c0000gn/T/rea-android-pV4YZC/target.apk",
+      "class_count": 9085,
+      "resource_count": 2,
+      "threads": 1,
+      "resources": "full"
+    },
+    "calls": [
+      {
+        "operation": "rea_jvm_status",
+        "input": {},
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"metadata_scope\":\"parsed_members\",\"engine_reported_version\":\"0.7.1\",\"available_processors\":8,\"java_version\":\"21.0.10\",\"max_heap_bytes\":3221225472}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      {
+        "operation": "load_apk",
+        "input": {
+          "path": "/var/folders/3l/9_bz5rn91nb23fkjstgwyh3c0000gn/T/rea-android-pV4YZC/target.apk",
+          "threads": 1,
+          "resources": "full"
+        },
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"state\":\"LOADED\",\"apk_path\":\"/var/folders/3l/9_bz5rn91nb23fkjstgwyh3c0000gn/T/rea-android-pV4YZC/target.apk\",\"class_count\":9085,\"raw_class_count\":9085,\"resource_count\":2,\"load_duration_ms\":5757,\"decompile_timeout_ms\":90000,\"threads\":1,\"code_cache_size\":64,\"resources\":\"full\"}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      {
+        "operation": "get_class_summary",
+        "input": {
+          "class_name": "p.rd51"
+        },
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"fields\":[],\"field_count\":0,\"full_name\":\"p.rd51\",\"name\":\"rd51\",\"inner_classes\":[],\"inner_class_count\":0,\"method_count\":5,\"methods\":[{\"signature\":\"a(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Single\\u003ccom.spotify.searchview.proto.MainViewResponse\\u003e\",\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"is_constructor\":false,\"name\":\"a\",\"def_pos\":0},{\"signature\":\"b(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Completable\",\"dex_descriptor\":\"(Ljava/util/Map;)Lio/reactivex/rxjava3/core/Completable;\",\"is_constructor\":false,\"name\":\"b\",\"def_pos\":0},{\"signature\":\"c(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Single\\u003cp.sy21\\u003ccom.spotify.searchview.proto.NativeViewResponse\\u003e\\u003e\",\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"is_constructor\":false,\"name\":\"c\",\"def_pos\":0},{\"signature\":\"d(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, p.lnm\\u003c? super com.spotify.searchview.proto.MainViewResponse\\u003e): java.lang.Object\",\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;Lp/lnm;)Ljava/lang/Object;\",\"is_constructor\":false,\"name\":\"d\",\"def_pos\":0},{\"signature\":\"e(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Single\\u003cp.sy21\\u003ccom.spotify.searchview.proto.AutocompleteViewResponse\\u003e\\u003e\",\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"is_constructor\":false,\"name\":\"e\",\"def_pos\":0}]}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      {
+        "operation": "get_method_body",
+        "input": {
+          "class_name": "p.rd51",
+          "method_name": "a",
+          "overload_index": 0,
+          "smali_fallback": true
+        },
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"markers\":[\"abstract_method\"],\"body\":\"\",\"mode\":\"java\",\"class_name\":\"p.rd51\",\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"overload_count\":1,\"method_name\":\"a\",\"overload_index\":0,\"full_name\":\"p.rd51.a\",\"fell_back\":false}"
+            }
+          ],
+          "isError": false
+        }
+      }
+    ]
+  },
+  "normalized_result": {
+    "engine": {
+      "name": "jadx-headless-mcp",
+      "version": "0.7.1",
+      "artifact_sha256": "6e5eacf500b64292bfb73c49797c1958f6ee44646e43e868039ae7feb573ff75",
+      "source_revision": "5844800a486d2248fa949b74c9896285f5b54de2",
+      "worker_count": 1,
+      "heap_limit_mib": 3072
+    },
+    "class_name": "p.rd51",
+    "method": {
+      "name": "a",
+      "reported_signature": "a(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>): io.reactivex.rxjava3.core.Single<com.spotify.searchview.proto.MainViewResponse>",
+      "overload_index": 0,
+      "is_constructor": false,
+      "dex_descriptor": "(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;"
+    },
+    "overload_count": 1,
+    "representation": "java",
+    "body_status": "not_available",
+    "fell_back": false,
+    "markers": [
+      "abstract_method"
+    ],
+    "source": {
+      "status": "complete",
+      "text": "",
+      "reported_total_bytes": null
+    }
+  },
+  "confidence": "derived",
+  "authority": "shipped-artifact",
+  "environment": null,
+  "limitations": [
+    "Static decompiler observations do not establish runtime behavior; the APK is never executed.",
+    "Method signatures use provider display types; DEX prototypes come from frozen JADX metadata. Display names may be aliases, and overload indices are local to this engine and artifact.",
+    "Class inventories use parsed metadata before code generation, including synthetic members that may be omitted from decompiled source. Source positions remain unknown.",
+    "Incoming reference totals count JADX using nodes. Direct invoke entries within a using method report raw DEX code-unit offsets and method indexes, but coverage is limited to those nodes and directly matched invokes; it does not establish every possible dynamic or reflective call site.",
+    "Manifest summary fields are extracted by the upstream engine; decoded XML is retained for verification. APK signatures, split APKs, native libraries and Android runtime capture are not verified by this provider."
+  ],
+  "relationship_coverage": null,
+  "locations": [],
+  "evidence_links": []
+}

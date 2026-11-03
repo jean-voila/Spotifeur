@@ -1,0 +1,6 @@
+essai,titre_public,duree_titre_s,fenetre,secondes,rx_wlan0_octets,rx_perfetto_tous_uid_octets,rx_perfetto_spotify_octets
+ligne-de-base,Spotify en pause,,repos-1,15.2,6575,,
+ligne-de-base,Spotify en pause,,repos-2,15.3,7026,,
+rafale,"Bruckner Symphonie 5 I, Haitink, Berliner Philharmoniker",,lancement-15s,15.52,13256941,3663986,3662830
+rafale,"Mahler Symphonie 9 IV, Rattle, Berliner Philharmoniker",1562,lancement-1.1s,1.12,13263295,,
+rafale,"Mahler Symphonie 9 IV, Rattle, Berliner Philharmoniker",1562,lancement-55.6s,55.6,13285027,,

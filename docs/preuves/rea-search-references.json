@@ -1,0 +1,181 @@
+{
+  "evidence_id": "ev_fc74bf056ef642b2e62245dd72b04280102c8df76f58f2dad93d777b8a0b2358",
+  "subject": {
+    "name": "dex11-projection.apk",
+    "digest": {
+      "sha256": "c5d8445d1f9d64c286097a85a1f93f1e0f7fdca32906f40f9498d2ff4e876f5b"
+    },
+    "local_path": "/private/tmp/spotifeur-catalog/dex11-projection.apk",
+    "format": "apk",
+    "architecture": null
+  },
+  "provider": {
+    "id": "jadx",
+    "name": "JADX headless",
+    "version": "0.7.1"
+  },
+  "analysis_profile": null,
+  "predicate_type": "rea.analysis",
+  "operation": "trace_android_references",
+  "parameters": {
+    "path": "/tmp/spotifeur-catalog/dex11-projection.apk",
+    "class_name": "p.rd51"
+  },
+  "raw_result": {
+    "server": {
+      "name": "rea-jadx-bridge",
+      "version": "4"
+    },
+    "bridge_sha256": "a02b1ef0a4a40abd1ae310b9ee686ca163e0b59a3256df524c35b90ed17e9e63",
+    "jar_sha256": "6e5eacf500b64292bfb73c49797c1958f6ee44646e43e868039ae7feb573ff75",
+    "loaded": {
+      "state": "LOADED",
+      "apk_path": "/var/folders/3l/9_bz5rn91nb23fkjstgwyh3c0000gn/T/rea-android-8sLuPb/target.apk",
+      "class_count": 9085,
+      "resource_count": 2,
+      "threads": 1,
+      "resources": "full"
+    },
+    "calls": [
+      {
+        "operation": "rea_jvm_status",
+        "input": {},
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"engine_reported_version\":\"0.7.1\",\"metadata_scope\":\"parsed_members\",\"max_heap_bytes\":2147483648,\"java_version\":\"21.0.10\",\"available_processors\":8}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      {
+        "operation": "load_apk",
+        "input": {
+          "path": "/var/folders/3l/9_bz5rn91nb23fkjstgwyh3c0000gn/T/rea-android-8sLuPb/target.apk",
+          "threads": 1,
+          "resources": "full"
+        },
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"state\":\"LOADED\",\"apk_path\":\"/var/folders/3l/9_bz5rn91nb23fkjstgwyh3c0000gn/T/rea-android-8sLuPb/target.apk\",\"class_count\":9085,\"raw_class_count\":9085,\"resource_count\":2,\"load_duration_ms\":4042,\"decompile_timeout_ms\":90000,\"threads\":1,\"code_cache_size\":64,\"resources\":\"full\"}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      {
+        "operation": "get_class_summary",
+        "input": {
+          "class_name": "p.rd51"
+        },
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"full_name\":\"p.rd51\",\"field_count\":0,\"fields\":[],\"methods\":[{\"name\":\"a\",\"is_constructor\":false,\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"signature\":\"a(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Single\\u003ccom.spotify.searchview.proto.MainViewResponse\\u003e\",\"def_pos\":0},{\"name\":\"b\",\"is_constructor\":false,\"dex_descriptor\":\"(Ljava/util/Map;)Lio/reactivex/rxjava3/core/Completable;\",\"signature\":\"b(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Completable\",\"def_pos\":0},{\"name\":\"c\",\"is_constructor\":false,\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"signature\":\"c(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Single\\u003cp.sy21\\u003ccom.spotify.searchview.proto.NativeViewResponse\\u003e\\u003e\",\"def_pos\":0},{\"name\":\"d\",\"is_constructor\":false,\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;Lp/lnm;)Ljava/lang/Object;\",\"signature\":\"d(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, p.lnm\\u003c? super com.spotify.searchview.proto.MainViewResponse\\u003e): java.lang.Object\",\"def_pos\":0},{\"name\":\"e\",\"is_constructor\":false,\"dex_descriptor\":\"(Ljava/util/Map;Ljava/util/Map;)Lio/reactivex/rxjava3/core/Single;\",\"signature\":\"e(java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e, java.util.Map\\u003cjava.lang.String, java.lang.String\\u003e): io.reactivex.rxjava3.core.Single\\u003cp.sy21\\u003ccom.spotify.searchview.proto.AutocompleteViewResponse\\u003e\\u003e\",\"def_pos\":0}],\"method_count\":5,\"inner_class_count\":0,\"inner_classes\":[],\"name\":\"rd51\"}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      {
+        "operation": "get_xrefs_to_class",
+        "input": {
+          "class_name": "p.rd51",
+          "limit": 2147483647,
+          "resolve_line": false
+        },
+        "response": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"items\":[{\"kind\":\"class\",\"name\":\"apq\",\"full_name\":\"p.apq\",\"containing_class\":\"\",\"top_class\":\"p.apq\",\"def_pos\":0},{\"kind\":\"class\",\"name\":\"kop\",\"full_name\":\"p.kop\",\"containing_class\":\"\",\"top_class\":\"p.kop\",\"def_pos\":0},{\"kind\":\"class\",\"name\":\"rx31\",\"full_name\":\"p.rx31\",\"containing_class\":\"\",\"top_class\":\"p.rx31\",\"def_pos\":0},{\"kind\":\"class\",\"name\":\"uw41\",\"full_name\":\"p.uw41\",\"containing_class\":\"\",\"top_class\":\"p.uw41\",\"def_pos\":0}],\"count\":4,\"target\":\"p.rd51\",\"resolve_line\":false,\"total\":4}"
+            }
+          ],
+          "isError": false
+        }
+      }
+    ]
+  },
+  "normalized_result": {
+    "engine": {
+      "name": "jadx-headless-mcp",
+      "version": "0.7.1",
+      "artifact_sha256": "6e5eacf500b64292bfb73c49797c1958f6ee44646e43e868039ae7feb573ff75",
+      "source_revision": "5844800a486d2248fa949b74c9896285f5b54de2",
+      "worker_count": 1,
+      "heap_limit_mib": 2048
+    },
+    "class_name": "p.rd51",
+    "method_name": null,
+    "overload_index": null,
+    "reported_signature": null,
+    "dex_descriptor": null,
+    "total": 4,
+    "references": [
+      {
+        "kind": "class",
+        "name": "apq",
+        "reported_full_name": "p.apq",
+        "containing_class": "",
+        "top_class": "p.apq",
+        "source_line": null,
+        "dex_offset": null,
+        "direct_invokes_exhaustive": null,
+        "direct_invokes": null
+      },
+      {
+        "kind": "class",
+        "name": "kop",
+        "reported_full_name": "p.kop",
+        "containing_class": "",
+        "top_class": "p.kop",
+        "source_line": null,
+        "dex_offset": null,
+        "direct_invokes_exhaustive": null,
+        "direct_invokes": null
+      },
+      {
+        "kind": "class",
+        "name": "rx31",
+        "reported_full_name": "p.rx31",
+        "containing_class": "",
+        "top_class": "p.rx31",
+        "source_line": null,
+        "dex_offset": null,
+        "direct_invokes_exhaustive": null,
+        "direct_invokes": null
+      },
+      {
+        "kind": "class",
+        "name": "uw41",
+        "reported_full_name": "p.uw41",
+        "containing_class": "",
+        "top_class": "p.uw41",
+        "source_line": null,
+        "dex_offset": null,
+        "direct_invokes_exhaustive": null,
+        "direct_invokes": null
+      }
+    ],
+    "coverage": "complete",
+    "reference_unit": "using_node"
+  },
+  "confidence": "observed",
+  "authority": "shipped-artifact",
+  "environment": null,
+  "limitations": [
+    "Static decompiler observations do not establish runtime behavior; the APK is never executed.",
+    "Method signatures use provider display types; DEX prototypes come from frozen JADX metadata. Display names may be aliases, and overload indices are local to this engine and artifact.",
+    "Class inventories use parsed metadata before code generation, including synthetic members that may be omitted from decompiled source. Source positions remain unknown.",
+    "Incoming reference totals count JADX using nodes. Direct invoke entries within a using method report raw DEX code-unit offsets and method indexes, but coverage is limited to those nodes and directly matched invokes; it does not establish every possible dynamic or reflective call site.",
+    "Manifest summary fields are extracted by the upstream engine; decoded XML is retained for verification. APK signatures, split APKs, native libraries and Android runtime capture are not verified by this provider."
+  ],
+  "relationship_coverage": null,
+  "locations": [],
+  "evidence_links": []
+}

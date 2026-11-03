@@ -1,0 +1,120 @@
+essai,evenement,temps_relatif_s,etat,position_ms,buffer_ms,vitesse,titre_public_attendu
+fichier-local,avant,0.00,PAUSED(2),0,0,0.0,
+fichier-local,action:lecture,0.19,,,,,
+fichier-local,lecture-0,1.44,PLAYING(3),32623,0,1.0,
+fichier-local,lecture-1,2.21,PLAYING(3),32623,0,1.0,
+fichier-local,lecture-2,3.02,PLAYING(3),32623,0,1.0,
+fichier-local,lecture-3,3.75,PLAYING(3),32623,0,1.0,
+fichier-local,lecture-4,4.63,PLAYING(3),32623,0,1.0,
+fichier-local,action:seek-70pct,6.72,,,,,
+fichier-local,seek-0,7.71,PLAYING(3),87529,0,1.0,
+fichier-local,seek-1,8.57,PLAYING(3),87529,0,1.0,
+fichier-local,seek-2,9.33,PLAYING(3),87529,0,1.0,
+fichier-local,seek-3,10.15,PLAYING(3),87529,0,1.0,
+fichier-local,seek-4,10.94,PLAYING(3),87529,0,1.0,
+fichier-local,seek-5,11.78,PLAYING(3),87529,0,1.0,
+fichier-local,action:pause,14.01,,,,,
+fichier-local,pause,15.68,PAUSED(2),94647,0,0.0,
+fichier-local,action:position-initiale,15.85,,,,,
+fichier-local,position-initiale,17.63,PAUSED(2),0,0,0.0,
+album,action:arrêt-processus,0.00,,,,,
+album,action:ouverture-album,1.53,,,,,
+album,action:lecture-titre,6.82,,,,,
+album,lecture-0,7.78,PLAYING(3),319,0,1.0,So What
+album,lecture-1,8.57,PLAYING(3),816,0,1.0,So What
+album,lecture-2,9.44,PLAYING(3),816,0,1.0,So What
+transition,avant,0.00,PLAYING(3),816,0,1.0,So What
+transition,action:seek-lointain,0.11,,,,,
+transition,seek-lointain-0,1.04,PLAYING(3),393482,0,1.0,So What
+transition,seek-lointain-1,1.96,PLAYING(3),393482,0,1.0,So What
+transition,seek-lointain-2,2.77,PLAYING(3),393482,0,1.0,So What
+transition,action:suivant,3.97,,,,,
+transition,suivant-0,4.87,PLAYING(3),329,0,1.0,
+transition,suivant-1,5.69,PLAYING(3),329,0,1.0,
+transition,suivant-2,6.52,PLAYING(3),329,0,1.0,
+transition,action:pause,7.67,,,,,
+transition,pause-0,8.79,PAUSED(2),3840,0,0.0,
+transition,pause-1,9.63,PAUSED(2),3840,0,0.0,
+transition,pause-2,10.40,PAUSED(2),3840,0,0.0,
+playlist-tierce,avant,0.00,PAUSED(2),3840,0,0.0,
+playlist-tierce,action:lecture-playlist-tierce,0.14,,,,,
+playlist-tierce,lecture-0,1.35,PLAYING(3),465,0,1.0,Some Other Time/Bill Evans Trio
+playlist-tierce,lecture-1,2.22,PLAYING(3),465,0,1.0,Some Other Time/Bill Evans Trio
+playlist-tierce,lecture-2,3.21,PLAYING(3),465,0,1.0,Some Other Time/Bill Evans Trio
+playlist-tierce,lecture-3,4.04,PLAYING(3),465,0,1.0,Some Other Time/Bill Evans Trio
+playlist-tierce,lecture-4,5.03,PLAYING(3),465,0,1.0,Some Other Time/Bill Evans Trio
+playlist-tierce,action:pause,5.16,,,,,
+playlist-tierce,pause,6.34,PAUSED(2),4720,0,0.0,Some Other Time/Bill Evans Trio
+telechargement,avant,0.00,PAUSED(2),4720,0,0.0,
+telechargement,action:lecture-téléchargement,0.10,,,,,
+telechargement,lecture-0,1.13,PLAYING(3),405,0,1.0,
+telechargement,lecture-1,2.08,PLAYING(3),931,0,1.0,
+telechargement,lecture-2,3.06,PLAYING(3),931,0,1.0,
+telechargement,lecture-3,3.86,PLAYING(3),931,0,1.0,
+telechargement,titre-visible-dans-session,4.17,,,,,True
+telechargement,action:pause,4.29,,,,,
+telechargement,pause,5.69,PAUSED(2),4240,0,0.0,
+transition-naturelle,action:ouverture-album,-5.20,,,,,
+transition-naturelle,action:lecture-blue-in-green,0.00,,,,,
+transition-naturelle,lecture-0,1.17,PLAYING(3),237,0,1.0,Blue in Green
+transition-naturelle,lecture-1,2.35,PLAYING(3),237,0,1.0,Blue in Green
+transition-naturelle,lecture-2,3.45,PLAYING(3),237,0,1.0,Blue in Green
+transition-naturelle,lecture-3,4.68,PLAYING(3),237,0,1.0,Blue in Green
+transition-naturelle,action:seek-fin-de-titre,140.58,,,,,
+transition-naturelle,fin-0,141.74,PLAYING(3),316940,0,1.0,Blue in Green
+transition-naturelle,fin-1,142.70,PLAYING(3),316940,0,1.0,Blue in Green
+transition-naturelle,fin-2,143.59,PLAYING(3),316940,0,1.0,Blue in Green
+transition-naturelle,fin-10,151.02,PLAYING(3),316940,0,1.0,Blue in Green
+transition-naturelle,fin-15,155.84,PLAYING(3),316940,0,1.0,Blue in Green
+transition-naturelle,fin-16,156.74,PLAYING(3),316940,0,1.0,Blue in Green
+transition-naturelle,fin-17,157.80,PLAYING(3),333230,0,1.0,Blue in Green
+transition-naturelle,fin-18,158.63,PLAYING(3),333230,0,1.0,Blue in Green
+transition-naturelle,fin-19,159.49,PLAYING(3),333230,0,1.0,Blue in Green
+transition-naturelle,fin-20,160.29,BUFFERING(6),0,0,0.0,titre-suivant-de-la-file
+transition-naturelle,fin-21,161.16,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-22,162.21,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-23,163.14,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-24,164.16,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-30,169.92,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-40,179.53,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-50,188.99,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-60,198.78,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+transition-naturelle,fin-70,208.05,PLAYING(3),164,0,1.0,titre-suivant-de-la-file
+coupure-reseau,action:lecture-bruckner,0.00,,,,,
+coupure-reseau,action:ouvrir-lecteur,1.91,,,,,
+coupure-reseau,avant-coupure-0,5.39,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,avant-coupure-5,12.58,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,avant-coupure-10,19.73,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,avant-coupure-15,26.66,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,action:coupure-reseau-spotify,32.44,,,,,
+coupure-reseau,coupure-0,33.99,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-50,114.54,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-100,191.65,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-150,272.02,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-200,353.04,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-250,434.10,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-300,514.31,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-350,594.50,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-397,670.63,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-398,672.28,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-399,673.79,PLAYING(3),316,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-400,675.48,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,arret-lecture-observe,675.64,,,,,
+coupure-reseau,coupure-401,677.15,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,coupure-402,678.65,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,action:retablissement-reseau-spotify,690.34,,,,,
+coupure-reseau,retabli-0,691.67,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-4,695.27,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-8,698.99,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-12,702.69,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-16,706.51,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-20,710.35,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-24,714.23,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-28,718.09,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-32,721.86,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-36,725.57,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-37,726.44,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-38,727.31,BUFFERING(6),672403,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,retabli-39,728.26,PLAYING(3),672410,0,1.0,"Bruckner Symphonie 8 Adagio, Celibidache"
+coupure-reseau,action:pause,728.63,,,,,
+coupure-reseau,pause,730.44,PAUSED(2),673800,0,0.0,"Bruckner Symphonie 8 Adagio, Celibidache"

@@ -1,0 +1,13 @@
+.DS_Store
+*.apkm
+*.apk
+*.so
+*.dex
+# Android build outputs
+build/
+.gradle/
+local.properties
+*.keystore
+*.jks
+.idea/
+*.iml
