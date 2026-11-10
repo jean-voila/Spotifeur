@@ -322,6 +322,14 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
     fun seekTo(position: Long) =
         if (casting) cast.seek(position) else model.player.seek(position.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
     fun toggleShuffle() = model.player.shuffle()
+    /** Long press on shuffle: switches smart shuffle, the same setting as in Settings, and applies it at once. */
+    fun toggleSmartShuffle() {
+        val on = !settings.value.smartShuffle
+        if (on && !fr.spotifeur.data.SpotifyAccount.signedIn) { sendToast(context.getString(R.string.smart_shuffle_needs_account)); return }
+        updateSettings { it.copy(smartShuffle = on) }
+        model.player.smartShuffleChanged(on)
+        sendToast(context.getString(if (on) R.string.smart_shuffle_on else R.string.smart_shuffle_off))
+    }
     fun cycleRepeatMode() = model.player.repeat()
 
     fun toggleFavorite() { stablePlayerState.value.currentSong?.let(::toggleFavoriteSpecificSong) }

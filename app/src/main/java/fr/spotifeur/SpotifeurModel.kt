@@ -92,7 +92,7 @@ data class LibraryUi(val content: HomeLibrary? = null, val loading: Boolean = fa
 data class DetailUi(val content: CatalogDetail? = null, val loading: Boolean = false, val error: String? = null)
 
 class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
-    val player = SpotifyPlayer(app, viewModelScope)
+    val player = SpotifyPlayer(app, viewModelScope, ::smartShuffle)
     private val pinnedStore = PinnedStore(app)
     val pins = pinnedStore.pins
     fun togglePin(item: Music) = pinnedStore.toggle(item)
@@ -792,6 +792,16 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     }
     internal suspend fun playlistSuggestions(playlist: Music, tracks: List<Music>): List<Music> =
         spotifyPlaylists.recommendations(playlist.id, tracks, mutableLibrary.value.content?.savedTracks.orEmpty())
+
+    /** Smart shuffle picks for [context]. The player only asks while the setting is on, signed in and online. */
+    private suspend fun smartShuffle(context: List<Music>): List<Music> {
+        val source = catalog ?: return emptyList()
+        val saved = mutableLibrary.value.content?.savedTrackUris.orEmpty()
+        return withContext(Dispatchers.Default) {
+            val excluded = saved.toHashSet().apply { context.mapTo(this, Music::id) }
+            fr.spotifeur.data.smartShuffleTracks(context, excluded, metadata = source::metadata)
+        }
+    }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     internal suspend fun addSpotifyPlaylistTracks(playlist: Music, tracks: List<Music>) {

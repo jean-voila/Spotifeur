@@ -107,6 +107,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.ui.res.stringResource
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -487,7 +488,9 @@ fun FullPlayerContent(
             isFavoriteProvider = isFavoriteProvider,
             onShuffleToggle = onShuffleToggle,
             onRepeatToggle = onRepeatToggle,
-            onFavoriteToggle = onFavoriteToggle
+            onFavoriteToggle = onFavoriteToggle,
+            isSmartShuffle = appSettings.smartShuffle,
+            onShuffleLongPress = { playerViewModel.toggleSmartShuffle() }
         )
     }
 
@@ -928,7 +931,9 @@ private fun FullPlayerControlsSection(
     isFavoriteProvider: () -> Boolean,
     onShuffleToggle: () -> Unit,
     onRepeatToggle: () -> Unit,
-    onFavoriteToggle: () -> Unit
+    onFavoriteToggle: () -> Unit,
+    isSmartShuffle: Boolean,
+    onShuffleLongPress: () -> Unit
 ) {
     val motionScheme = remember { MotionScheme.expressive() }
     val controlSpatialSpec = remember { motionScheme.fastSpatialSpec<Float>() }
@@ -991,7 +996,9 @@ private fun FullPlayerControlsSection(
                 isFavoriteProvider = isFavoriteProvider,
                 onShuffleToggle = onShuffleToggle,
                 onRepeatToggle = onRepeatToggle,
-                onFavoriteToggle = onFavoriteToggle
+                onFavoriteToggle = onFavoriteToggle,
+                isSmartShuffle = isSmartShuffle,
+                onShuffleLongPress = onShuffleLongPress
             )
         }
     }
@@ -2277,7 +2284,9 @@ private fun BottomToggleRow(
     isFavoriteProvider: () -> Boolean,
     onShuffleToggle: () -> Unit,
     onRepeatToggle: () -> Unit,
-    onFavoriteToggle: () -> Unit
+    onFavoriteToggle: () -> Unit,
+    isSmartShuffle: Boolean,
+    onShuffleLongPress: () -> Unit
 ) {
     val isFavorite = isFavoriteProvider()
     val rowCorners = 60.dp
@@ -2321,6 +2330,8 @@ private fun BottomToggleRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val commonModifier = Modifier.weight(1f)
+            val smart = isShuffleEnabled && isSmartShuffle
+            val smartLabel = stringResource(R.string.settings_smart_shuffle_title)
 
             ToggleSegmentButton(
                 modifier = commonModifier,
@@ -2333,7 +2344,10 @@ private fun BottomToggleRow(
                 inactiveContentColor = inactiveContentColor,
                 onClick = onShuffleToggle,
                 iconId = R.drawable.rounded_shuffle_24,
-                contentDesc = "Aleatorio"
+                contentDesc = if (smart) smartLabel else "Aleatorio",
+                onLongClick = onShuffleLongPress,
+                onLongClickLabel = smartLabel,
+                badge = if (smart) androidx.compose.material.icons.Icons.Rounded.AutoAwesome else null
             )
             val repeatActive = repeatMode != Player.REPEAT_MODE_OFF
             val repeatIcon = when (repeatMode) {

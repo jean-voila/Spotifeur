@@ -46,7 +46,7 @@ are illustrations. Editable artwork is in [`design/`](design/).
 <summary><b>All features and settings</b></summary>
 
 - **Home and library.** Pinned items, recently played tracks, downloads, liked songs, playlists, albums, artists and local files. Each home shelf can be shown or hidden, moved, and laid out as a row, a large row, a grid, a list or pills, with the number of items you choose. The buttons of album and playlist pages can be arranged as well, the others staying in a ⋮ menu. Pins are stored on the device only.
-- **Player.** Full-screen player with seek bar, queue, shuffle, repeat, sleep timer, and the codec and bitrate of the current track if you want them.
+- **Player.** Full-screen player with seek bar, queue, shuffle, repeat, sleep timer, and the codec and bitrate of the current track if you want them. Smart shuffle (long press the shuffle button, or Settings; off by default) mixes in tracks from artists related to the ones you play, at most one every three tracks, taken from their albums and singles rather than their top tracks. It never uses Spotify's radio or recommendation services, where labels can trade royalties for promotion.
 - **Audio quality.** Separate settings for Wi-Fi, mobile data and downloads: Normal (AAC 128 kbit/s), Very high (up to AAC 256 kbit/s) or Automatic. Playback and downloads use the quality authorized by the Spotify account: 128 kbit/s for Free, up to 256 kbit/s for Premium.
 - **Listening history.** Tracks played in Spotifeur from Spotify, YouTube Music and local files, together with what Spotify reports from your other apps and devices, grouped by day.
 - **Lyrics.** Synced lyrics from Spotify, with an immersive mode. When Spotify has none, Spotifeur can look them up on LRCLIB.

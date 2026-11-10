@@ -56,6 +56,14 @@ internal class SpotifyCatalog(
         return metadataCache[canonical] ?: throw SpotifyFailure("This item is not available in the catalog.")
     }
 
+    /** Metadata of several entities by URI, fetched in batches for the ones not cached yet. Unavailable ones are left out. */
+    suspend fun metadata(uris: List<String>): Map<String, ByteArray> = coroutineScope {
+        val valid = uris.mapNotNull(::canonicalMusicUri).filter { metadataKind(it) != null }.distinct()
+        valid.filter { metadataCache[it] == null }.chunked(40)
+            .map { chunk -> async { requests.withPermit { fetchMetadata(chunk) } } }.awaitAll()
+        valid.mapNotNull { uri -> metadataCache[uri]?.let { uri to it } }.toMap()
+    }
+
     suspend fun detail(item: Music, page: String? = null): CatalogDetail {
         if (item.kind == MusicKind.Playlist || item.kind == MusicKind.Radio) return playlist(item, page)
         val metadata = Proto(metadataBytes(item.id))

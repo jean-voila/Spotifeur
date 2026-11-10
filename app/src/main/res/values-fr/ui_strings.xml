@@ -313,6 +313,8 @@
     <string name="settings_show_queue_history_title">Afficher l\'historique de la file</string>
     <string name="settings_show_scrollbar_subtitle">Afficher la barre de défilement latérale sur les listes de musique pour un défilement rapide</string>
     <string name="settings_show_scrollbar_title">Afficher la barre de défilement</string>
+    <string name="settings_smart_shuffle_subtitle">En lecture aléatoire, ajoute des titres d\'artistes proches de ceux que vous écoutez, sans placement payant. Nécessite un compte Spotify. Appui long sur le bouton aléatoire du lecteur pour l\'activer.</string>
+    <string name="settings_smart_shuffle_title">Lecture aléatoire intelligente</string>
     <string name="settings_smooth_corners_subtitle">Utilise des formes d\'angles complexes pour une meilleure esthétique, mais peut affecter les performances sur les appareils bas de gamme</string>
     <string name="settings_smooth_corners_title">Utiliser des angles lisses</string>
     <string name="settings_tap_bg_closes_subtitle">Appuyez sur l\'arrière-plan flou pour fermer la feuille du lecteur.</string>
@@ -333,6 +335,9 @@
     <string name="sleep_timer_title">Minuteur de veille</string>
     <string name="sleep_timer_ui_set_custom_duration">Définir une durée personnalisée</string>
     <string name="sleep_timer_zero_minutes_format">Minuteur</string>
+    <string name="smart_shuffle_needs_account">La lecture aléatoire intelligente nécessite un compte Spotify</string>
+    <string name="smart_shuffle_off">Lecture aléatoire intelligente désactivée</string>
+    <string name="smart_shuffle_on">Lecture aléatoire intelligente activée</string>
     <string name="song_info_action_add_to_queue">Ajouter à la file d\'attente</string>
     <string name="song_info_action_play">Lire</string>
     <string name="song_info_action_queue_next">Suivant</string>

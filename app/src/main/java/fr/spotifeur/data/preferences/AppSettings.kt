@@ -33,6 +33,7 @@ data class AppSettings(
     val pauseOnVolumeZero: Boolean = false,
     val resumeOnHeadphones: Boolean = false,
     val persistentShuffle: Boolean = false,
+    val smartShuffle: Boolean = false,
     val showQueueHistory: Boolean = true,
     val audioCacheLimitMb: Int = 4096,
     val preloadTracks: Int = 10,
@@ -71,7 +72,7 @@ data class AppSettings(
         .put("immersiveLyricsTimeoutMs", immersiveLyricsTimeoutMs).put("lyricsFallback", lyricsFallback)
         .put("defaultTab", defaultTab).put("keepPlayingInBackground", keepPlayingInBackground)
         .put("pauseOnVolumeZero", pauseOnVolumeZero).put("resumeOnHeadphones", resumeOnHeadphones)
-        .put("persistentShuffle", persistentShuffle).put("showQueueHistory", showQueueHistory)
+        .put("persistentShuffle", persistentShuffle).put("smartShuffle", smartShuffle).put("showQueueHistory", showQueueHistory)
         .put("audioCacheLimitMb", audioCacheLimitMb).put("preloadTracks", preloadTracks)
         .put("preloadEntireQueue", preloadEntireQueue).put("preloadOnMobile", preloadOnMobile).put("offlineMode", offlineMode)
         .put("tapBackgroundClosesPlayer", tapBackgroundClosesPlayer).put("hapticsEnabled", hapticsEnabled)
@@ -117,6 +118,7 @@ data class AppSettings(
                 pauseOnVolumeZero = json.optBoolean("pauseOnVolumeZero", d.pauseOnVolumeZero),
                 resumeOnHeadphones = json.optBoolean("resumeOnHeadphones", d.resumeOnHeadphones),
                 persistentShuffle = json.optBoolean("persistentShuffle", d.persistentShuffle),
+                smartShuffle = json.optBoolean("smartShuffle", d.smartShuffle),
                 showQueueHistory = json.optBoolean("showQueueHistory", d.showQueueHistory),
                 audioCacheLimitMb = json.optInt("audioCacheLimitMb", d.audioCacheLimitMb).coerceIn(512, 32768),
                 preloadTracks = (if (json.optBoolean("preloadEntireQueue", false)) 10 else json.optInt("preloadTracks", d.preloadTracks)).coerceIn(0, 20),

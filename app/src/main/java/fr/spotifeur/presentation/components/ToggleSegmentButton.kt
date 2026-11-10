@@ -6,12 +6,13 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,7 +48,11 @@ fun ToggleSegmentButton(
     activeCornerRadius: Dp = 8.dp,
     onClick: () -> Unit,
     iconId: Int,
-    contentDesc: String
+    contentDesc: String,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
+    /** A small icon over the top end corner, such as the smart shuffle mark. */
+    badge: ImageVector? = null
 ) {
     ToggleSegmentButtonContainer(
         modifier = modifier,
@@ -56,14 +61,25 @@ fun ToggleSegmentButton(
         activeColor = activeColor,
         inactiveColor = inactiveColor,
         activeCornerRadius = activeCornerRadius,
-        onClick = onClick
+        onClick = onClick,
+        onLongClick = onLongClick,
+        onLongClickLabel = onLongClickLabel
     ) {
-        Icon(
-            painter = painterResource(iconId),
-            contentDescription = contentDesc,
-            tint = if (active) activeContentColor else inactiveContentColor,
-            modifier = Modifier.size(24.dp)
-        )
+        val tint = if (active) activeContentColor else inactiveContentColor
+        Box {
+            Icon(
+                painter = painterResource(iconId),
+                contentDescription = contentDesc,
+                tint = tint,
+                modifier = Modifier.size(24.dp)
+            )
+            if (badge != null) Icon(
+                imageVector = badge,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(12.dp).align(Alignment.TopEnd).offset(x = 7.dp, y = (-5).dp)
+            )
+        }
     }
 }
 
@@ -197,6 +213,8 @@ private fun ToggleSegmentButtonContainer(
     inactiveColor: Color,
     activeCornerRadius: Dp,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     content: @Composable () -> Unit
 ) {
     val targetBgColor = if (active) activeColor else inactiveColor
@@ -216,7 +234,7 @@ private fun ToggleSegmentButtonContainer(
             .fillMaxSize()
             .clip(RoundedCornerShape(cornerRadius))
             .background(bgColor)
-            .clickable(enabled = enabled, onClick = onClick),
+            .combinedClickable(enabled = enabled, onLongClickLabel = onLongClickLabel, onLongClick = onLongClick, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
