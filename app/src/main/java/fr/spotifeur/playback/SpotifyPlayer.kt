@@ -32,6 +32,8 @@ data class Playback(
     val playWhenReady: Boolean = false,
     /** Measured from the selected audio track, for the file information of the player. */
     val audioFormat: String = "",
+    /** Tracks the user queued, waiting right after the current one. */
+    val queuedCount: Int = 0,
 ) { val track: Music? get() = queue.getOrNull(index) }
 
 /** Outlives the activity, like the playback service whose queue it describes. */
@@ -180,6 +182,10 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
     }
     fun next() { controller?.seekToNextMediaItem() }
     fun previous() { controller?.seekToPrevious() }
+    fun previousTrack() {
+        val player = controller ?: return
+        if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem() else player.seekTo(0)
+    }
     fun seek(positionMs: Int) { controller?.let { player ->
         val failed = player.playerError != null
         player.seekTo(positionMs.coerceAtLeast(0).toLong())
@@ -280,7 +286,8 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         }
         mutableState.value = Playback(queue, index, player.isPlaying, player.playbackState == Player.STATE_BUFFERING,
             player.currentPosition.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-            ShuffleMemory.enabled, player.repeatMode, error, player.hasNextMediaItem() || after.isNotEmpty(), player.playWhenReady, currentAudioFormat(player))
+            ShuffleMemory.enabled, player.repeatMode, error, player.hasNextMediaItem() || after.isNotEmpty(), player.playWhenReady, currentAudioFormat(player),
+            userQueue(player).size)
     }
     private companion object {
         const val WINDOW_BEHIND = 20

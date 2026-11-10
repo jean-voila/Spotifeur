@@ -1,5 +1,6 @@
 package fr.spotifeur.presentation.screens
 
+import fr.spotifeur.data.source
 import fr.spotifeur.presentation.components.MusicOptionsHost
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -254,6 +255,23 @@ fun ArtistDetailScreen(
             val related = detail?.content?.related.orEmpty().filter { it.id != current.id }
             val albums = related.filter { it.kind == MusicKind.Album }
             val artists = related.filter { it.kind == MusicKind.Artist }
+            val profile = detail?.content?.artist
+            val exact = remember { java.text.NumberFormat.getIntegerInstance() }
+            val short = remember { android.icu.text.CompactDecimalFormat.getInstance(java.util.Locale.getDefault(), android.icu.text.CompactDecimalFormat.CompactStyle.SHORT) }
+            val numbers = remember(profile?.approximate) { { value: Long -> if (profile?.approximate == true) short.format(value) else exact.format(value) } }
+            // Release groups as the official page shows them; pages stored before profiles keep one list.
+            val albumsById = remember(albums) { albums.associateBy(Music::id) }
+            val sections = remember(profile, albums) {
+                if (profile == null) listOf(R.string.albums to albums)
+                else listOf(
+                    R.string.artist_popular_releases to profile.popularReleases,
+                    R.string.albums to profile.albums,
+                    R.string.artist_singles to profile.singles,
+                    R.string.artist_compilations to profile.compilations,
+                    R.string.artist_appears_on to profile.appearsOn,
+                ).map { (title, ids) -> title to ids.mapNotNull(albumsById::get) }
+            }.filter { it.second.isNotEmpty() }
+            val expanded = remember(item.id) { androidx.compose.runtime.mutableStateMapOf<Int, Boolean>() }
             val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
             val showScrollBar = LocalShowScrollbar.current && collapseFraction > 0.95f &&
                 (lazyListState.canScrollForward || lazyListState.canScrollBackward)
@@ -275,7 +293,8 @@ fun ArtistDetailScreen(
                 item(key = "artist_actions") {
                     DetailActionsRow(
                         item = current,
-                        canSave = true,
+                        canSave = current.source == fr.spotifeur.data.MusicSource.Spotify,
+                        showRadio = current.source == fr.spotifeur.data.MusicSource.Spotify,
                         isSaved = current.id in saved,
                         isPinned = pins.any { it.id == current.id },
                         onSave = { model.toggleFavorite(current) },
@@ -284,6 +303,17 @@ fun ArtistDetailScreen(
                         ui = ui,
                     )
                 }
+                profile?.monthlyListeners?.let { listeners ->
+                    item(key = "artist_listeners") {
+                        Text(
+                            stringResource(R.string.artist_monthly_listeners, numbers(listeners)),
+                            Modifier.padding(start = 4.dp, bottom = 8.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (songs.isNotEmpty()) item(key = "artist_popular_header") { ArtistSectionTitle(stringResource(R.string.artist_popular)) }
                 if (songs.isEmpty() && detail?.loading != false) item(key = "artist_loading") {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         ContainedLoadingIndicator()
@@ -304,18 +334,14 @@ fun ArtistDetailScreen(
                         isPlaying = isCurrent && stablePlayerState.isPlaying,
                         onSongClick = { ui.playSongs(songs, song, artist.name) },
                         onMoreOptionsClick = { selectedSong = song },
+                        supportingText = profile?.playCounts?.get(song.id)?.let(numbers),
                     )
                 }
-                if (albums.isNotEmpty()) {
-                    item(key = "artist_albums_header") {
-                        Text(
-                            stringResource(R.string.albums),
-                            Modifier.padding(top = 16.dp, bottom = 4.dp, start = 4.dp),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    items(albums, key = { "artist_album_" + it.id }, contentType = { "artist_album" }) { album ->
+                sections.forEach { (title, list) ->
+                    val open = expanded[title] == true
+                    val shown = if (open) list else list.take(SECTION_PREVIEW)
+                    item(key = "artist_section_$title") { ArtistSectionTitle(stringResource(title)) }
+                    items(shown, key = { "artist_section_${title}_" + it.id }, contentType = { "artist_album" }) { album ->
                         Box(Modifier.padding(bottom = 8.dp)) { AlbumListItem(
                             album = album.toAlbum(),
                             albumColorSchemePairFlow = ui.getAlbumColorSchemeFlow(album.imageUrl.orEmpty()),
@@ -323,23 +349,32 @@ fun ArtistDetailScreen(
                             onLongPress = { optionsFor = album },
                         ) }
                     }
+                    if (list.size > SECTION_PREVIEW) item(key = "artist_section_more_$title") {
+                        androidx.compose.material3.TextButton(onClick = { expanded[title] = !open }) {
+                            Text(if (open) stringResource(R.string.artist_show_less) else stringResource(R.string.artist_show_all, list.size))
+                        }
+                    }
                 }
                 if (artists.isNotEmpty()) {
-                    item(key = "artist_related_header") {
-                        Text(
-                            stringResource(R.string.similar_artists),
-                            Modifier.padding(top = 16.dp, bottom = 4.dp, start = 4.dp),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    items(artists, key = { "artist_related_" + it.id }, contentType = { "artist_related" }) { other ->
+                    item(key = "artist_related_header") { ArtistSectionTitle(stringResource(R.string.similar_artists)) }
+                    val similarOpen = expanded[R.string.similar_artists] == true
+                    items(if (similarOpen) artists else artists.take(SECTION_PREVIEW), key = { "artist_related_" + it.id }, contentType = { "artist_related" }) { other ->
                         Box(Modifier.padding(bottom = 8.dp)) { ArtistListItem(
                             artist = other.toArtist(),
                             onClick = { navController.openMusic(ui, other) },
                             onLongPress = { optionsFor = other },
                         ) }
                     }
+                }
+                if (artists.size > SECTION_PREVIEW) item(key = "artist_related_more") {
+                    val similarOpen = expanded[R.string.similar_artists] == true
+                    androidx.compose.material3.TextButton(onClick = { expanded[R.string.similar_artists] = !similarOpen }) {
+                        Text(if (similarOpen) stringResource(R.string.artist_show_less) else stringResource(R.string.artist_show_all, artists.size))
+                    }
+                }
+                val biography = profile?.biography?.takeIf(String::isNotBlank)
+                if (biography != null || profile?.worldRank != null) item(key = "artist_about") {
+                    ArtistAbout(biography, profile?.monthlyListeners?.let(numbers), profile?.worldRank, profile?.headerImageUrl)
                 }
             }
             if (showScrollBar) {
@@ -368,6 +403,45 @@ fun ArtistDetailScreen(
 }
 
 
+private const val SECTION_PREVIEW = 6
+
+@Composable
+private fun ArtistSectionTitle(text: String) {
+    Text(
+        text,
+        Modifier.padding(top = 16.dp, bottom = 8.dp, start = 4.dp),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+/** The "About" card: header picture, monthly listeners, world rank and the biography, folded at first. */
+@Composable
+private fun ArtistAbout(biography: String?, listeners: String?, rank: Int?, image: String?) {
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        ArtistSectionTitle(stringResource(R.string.artist_about))
+        Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth().clickable(enabled = biography != null) { open = !open }) {
+            Column {
+                if (image != null) fr.spotifeur.presentation.components.SmartImage(
+                    model = image, contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+                Column(Modifier.padding(16.dp)) {
+                    if (rank != null) Text(stringResource(R.string.artist_world_rank, rank), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (listeners != null) Text(stringResource(R.string.artist_monthly_listeners, listeners), style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (biography != null) Text(
+                        biography, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium,
+                        maxLines = if (open) Int.MAX_VALUE else 4, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ArtistAlbumSectionSongItem(
     modifier: Modifier = Modifier,
@@ -377,7 +451,8 @@ private fun ArtistAlbumSectionSongItem(
     isCurrentSong: Boolean,
     isPlaying: Boolean,
     onSongClick: () -> Unit,
-    onMoreOptionsClick: () -> Unit
+    onMoreOptionsClick: () -> Unit,
+    supportingText: String? = null,
 ) {
     val isLastSong = songIndex == songCount - 1
 
@@ -427,6 +502,7 @@ private fun ArtistAlbumSectionSongItem(
                 isPlaying = isPlaying,
                 showAlbumArt = false,
                 customShape = songItemShape,
+                supportingText = supportingText,
                 onMoreOptionsClick = { onMoreOptionsClick() },
                 onClick = onSongClick
             )

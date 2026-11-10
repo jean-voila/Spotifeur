@@ -84,6 +84,12 @@ object YouTubeMusic {
         return YouTubePage(mergeVideoUploads(songTracks, videoTracks), findContinuation(songs, preferShelf = false))
     }
 
+    /** The songs shelf alone, with its continuation: what the mixed search adds to for paging. */
+    fun searchSongsPage(query: String): YouTubePage {
+        val songs = musicRequest("search", JSONObject().put("query", query).put("params", SONGS_FILTER))
+        return YouTubePage(parseTrackRows(songs).distinctBy(Music::id), findContinuation(songs, preferShelf = false))
+    }
+
     fun searchMore(token: String): YouTubePage {
         val response = musicRequest("search", JSONObject().put("continuation", token))
         return YouTubePage(parseTrackRows(response).distinctBy(Music::id), findContinuation(response, preferShelf = false))
@@ -115,6 +121,9 @@ object YouTubeMusic {
         return YouTubePlaylist(id, title, image, tracks.take(limit))
     }
 
+    /** A catalogue request for the album, artist and track pages. */
+    internal fun browseRequest(endpoint: String, body: JSONObject): JSONObject = musicRequest(endpoint, body)
+
     private fun musicRequest(endpoint: String, body: JSONObject): JSONObject {
         val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", MUSIC_CLIENT_VERSION).put("hl", "en").put("gl", "US")
         visitorData?.let { client.put("visitorData", it) }
@@ -126,8 +135,17 @@ object YouTubeMusic {
             .apply { visitorData?.let { header("X-Goog-Visitor-Id", it) } }
             .post(body.toString().toRequestBody(JSON))
             .build()
-        http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw YouTubeFailure("YouTube Music answered ${response.code}.", response.code.toString())
+        val started = android.os.SystemClock.elapsedRealtime()
+        val call = try { http.newCall(request).execute() } catch (failure: IOException) {
+            android.util.Log.d("SpotifeurSearch", "ytm $endpoint failed after ${android.os.SystemClock.elapsedRealtime() - started}ms ${failure.javaClass.simpleName}")
+            throw failure
+        }
+        call.use { response ->
+            val headersMs = android.os.SystemClock.elapsedRealtime() - started
+            if (!response.isSuccessful) {
+                android.util.Log.d("SpotifeurSearch", "ytm $endpoint ${response.code} after ${headersMs}ms")
+                throw YouTubeFailure("YouTube Music answered ${response.code}.", response.code.toString())
+            }
             val json = JSONObject(response.body?.string().orEmpty())
             learnVisitor(json)
             return json
@@ -157,6 +175,9 @@ object YouTubeMusic {
         }
         val formats = audioFormats(response)
         if (formats.isEmpty()) throw YouTubeFailure("No audio format is available.", "NO_AUDIO_FORMAT")
+        response.optJSONObject("playerConfig")?.optJSONObject("audioConfig")?.let { audio ->
+            if (audio.has("loudnessDb")) fr.spotifeur.playback.TrackLoudness.rememberYouTube(videoId, audio.optDouble("loudnessDb").toFloat())
+        }
         val js = if (formats.any { it.url == null }) runCatching { playerScript(videoId) }.getOrNull() else null
         var last: Exception? = null
         for (format in preferredOrder(formats)) {
@@ -313,8 +334,17 @@ internal fun parseTrackRow(renderer: JSONObject): Music? {
         group.any { run -> pageType(run) == ALBUM_PAGE }
     }
     val rest = texts.withIndex().filter { (index, text) ->
-        text.isNotBlank() && !DURATION.matches(text) && index != albumIndex && !(index == 0 && text in TYPE_LABELS)
+        text.isNotBlank() && !DURATION.matches(text) && index != albumIndex && !(index == 0 && text in TYPE_LABELS) && !COUNT_TEXT.matches(text)
     }
+    // Album and artist links of the row, so the track menu can open them.
+    val links = groups.flatten()
+    YouTubePages.remember(videoId, YouTubeRelations(
+        links.firstOrNull { pageType(it) == ALBUM_PAGE }?.let { run ->
+            run.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")?.takeIf(String::isNotBlank)
+                ?.let { Music(YTM_ALBUM_PREFIX + it, run.optString("text"), "", MusicKind.Album) }
+        },
+        YouTubePages.artistsOf(JSONArray(links)),
+    ))
     val artist = rest.firstOrNull()?.value.orEmpty()
     val thumbnails = renderer.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer")
         ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
@@ -329,6 +359,9 @@ internal fun parseTrackRow(renderer: JSONObject): Music? {
 private fun pageType(run: JSONObject): String? = run.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
     ?.optJSONObject("browseEndpointContextSupportedConfigs")?.optJSONObject("browseEndpointContextMusicConfig")
     ?.optString("pageType")
+
+/** "233M plays", "15M views": a row's audience, never its artist. */
+private val COUNT_TEXT = Regex("^[\\d.,]+[KMB]? (?:plays|views)$")
 
 internal fun durationMs(text: String): Int = text.split(':').fold(0) { total, part -> total * 60 + (part.toIntOrNull() ?: 0) } * 1000
 

@@ -20,6 +20,8 @@ import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.SwapHoriz
 import fr.spotifeur.presentation.navigation.navigateSafely
@@ -104,7 +106,10 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
         model.withLocalFiles(content?.tracks.orEmpty()).mapIndexed { index, music -> index to music.toSong(music.id in saved) }
             .sortedForPlaylist(sort) { it.second.title }
     }
-    val songs = remember(ordered) { ordered.map { it.second } }
+    // Search inside this playlist, revealed by pulling down at the top of the list.
+    var filter by remember(playlistId) { mutableStateOf("") }
+    val visible = remember(ordered, filter) { ordered.filter { it.second.matchesPlaylistFilter(filter) } }
+    val songs = remember(visible) { visible.map { it.second } }
     val isPinned = pins.any { it.id == playlistId }
     val isLiked = playlistId == ui.likedSongs.id
     val isLocalList = playlistId.startsWith(LOCAL_PLAYLIST_PREFIX)
@@ -151,7 +156,7 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
     var converting by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(-1) }
     var selected by remember { mutableStateOf<Song?>(null) }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = PLAYLIST_FILTER_ITEMS)
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     // Stable identities let a track appearing twice be dragged without the list jumping.
     val rowKeys = remember(songs) {
@@ -161,9 +166,9 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
     var removing by remember(playlistId) { mutableStateOf(false) }
     // Removes the row shown at a position of the displayed (possibly sorted) list.
     val removeAt: ((Int) -> Unit)? = when {
-        isLocalList -> { index -> ordered.getOrNull(index)?.let { model.localPlaylistStore.removeAt(playlistId, it.first) } }
+        isLocalList -> { index -> visible.getOrNull(index)?.let { model.localPlaylistStore.removeAt(playlistId, it.first) } }
         (isOwned && !isLiked || ownsYouTube) && online -> { index ->
-            ordered.getOrNull(index)?.let { (position, _) ->
+            visible.getOrNull(index)?.let { (position, _) ->
                 if (!removing) {
                     removing = true
                     scope.launch {
@@ -181,14 +186,21 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
         else -> null
     }
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-        if (from.index > 0 && to.index > 0) model.localPlaylistStore.move(playlistId, from.index - 1, to.index - 1)
+        val first = PLAYLIST_FILTER_ITEMS + 1
+        if (from.index >= first && to.index >= first) model.localPlaylistStore.move(playlistId, from.index - first, to.index - first)
     }
 
     // Another order only means something once the whole playlist is there.
-    LaunchedEffect(sort, content?.nextPage, detail?.loading) {
-        if (sort != PlaylistSort.DEFAULT && content?.nextPage != null && detail?.loading != true) model.loadDetail(item, more = true)
+    LaunchedEffect(sort, filter.isBlank(), content?.nextPage, detail?.loading) {
+        if ((sort != PlaylistSort.DEFAULT || filter.isNotBlank()) && content?.nextPage != null && detail?.loading != true) model.loadDetail(item, more = true)
     }
-    LaunchedEffect(sort) { listState.scrollToItem(0) }
+    LaunchedEffect(sort) { listState.scrollToItem(if (filter.isBlank()) PLAYLIST_FILTER_ITEMS else 0) }
+    // A list shorter than the screen cannot start below the search field: hide it once the tracks are there.
+    LaunchedEffect(ordered.isNotEmpty()) {
+        if (ordered.isNotEmpty() && filter.isBlank() && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            listState.scrollToItem(PLAYLIST_FILTER_ITEMS)
+        }
+    }
 
     LaunchedEffect(listState, songs.size, content?.nextPage) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
@@ -204,8 +216,9 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
     }
     CollectionDetailLayout(
         current.copy(subtitle = current.ownerUsername ?: sourceName ?: current.subtitle),
-        content?.total ?: songs.size, ui, navController, listState,
+        content?.total ?: ordered.size, ui, navController, listState, hiddenLeadingItems = PLAYLIST_FILTER_ITEMS,
     ) {
+        item(key = "playlist_filter") { PlaylistFilterField(filter, enabled = !reordering) { filter = it } }
         item(key = "playlist_actions") {
             val shareContext = LocalContext.current
             val editable = isLocalList || isOwned || ownsYouTube
@@ -221,7 +234,7 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
                     stringResource(if (isPinned) R.string.pin_remove else R.string.pin_add_home), { ui.togglePin(current) }, selected = isPinned))
                 add(ActionSpec(DetailAction.SORT, Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.playlist_sort), { sortMenu = true }))
                 if (isLocalList) add(ActionSpec(DetailAction.REORDER, Icons.Rounded.SwapVert, stringResource(R.string.reorder),
-                    { reordering = !reordering; if (reordering && sort != PlaylistSort.DEFAULT) { sort = PlaylistSort.DEFAULT; ui.setPlaylistSort(playlistId, sort) } },
+                    { reordering = !reordering; if (reordering) filter = ""; if (reordering && sort != PlaylistSort.DEFAULT) { sort = PlaylistSort.DEFAULT; ui.setPlaylistSort(playlistId, sort) } },
                     selected = reordering))
                 if (editable) add(ActionSpec(DetailAction.EDIT, Icons.Rounded.Edit, stringResource(R.string.detail_edit), { renaming = true },
                     enabled = isLocalList || online))
@@ -247,7 +260,20 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { ContainedLoadingIndicator() }
         }
         if (detail?.error != null) item { Text(detail.error, color = MaterialTheme.colorScheme.error) }
-                    if (songs.isEmpty()) item { Text(stringResource(R.string.playlist_empty_title), Modifier.padding(16.dp)) }
+                    // A playlist whose count is known but whose tracks did not come is not empty: say so and offer a retry.
+                    val unread = ordered.isEmpty() && (content?.total ?: 0) > 0 && detail?.loading == false
+                    if (unread) item {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text(stringResource(R.string.playlist_tracks_unavailable))
+                            TextButton(onClick = {
+                                if (isLiked) model.refreshLibrary()
+                                model.loadDetail(item, refresh = true)
+                            }, enabled = online) { Text(stringResource(R.string.google_signin_retry)) }
+                        }
+                    } else if (ordered.isEmpty() && detail?.loading == false) item { Text(stringResource(R.string.playlist_empty_title), Modifier.padding(16.dp)) }
+                    else if (songs.isEmpty() && filter.isNotBlank()) item {
+                        Text(stringResource(if (content?.nextPage != null) R.string.playlist_filter_loading else R.string.playlist_filter_empty), Modifier.padding(16.dp))
+                    }
                     itemsIndexed(songs, key = { index, song -> rowKeys.getOrElse(index) { "$index-${song.id}" } }, contentType = { _, _ -> "playlist_song" }) { index, song ->
                         val isCurrent = stable.currentSong?.id == song.id
                         val row: @Composable (Modifier) -> Unit = { modifier ->
@@ -265,7 +291,7 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
                             )
                         }
                         // Drag handles only appear in reorder mode, chosen from the page's buttons.
-                        if (reordering && isLocalList && sort == PlaylistSort.DEFAULT) {
+                        if (reordering && isLocalList && sort == PlaylistSort.DEFAULT && filter.isBlank()) {
                             ReorderableItem(reorderState, key = rowKeys[index]) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = {}, modifier = Modifier.draggableHandle()) {
@@ -345,4 +371,25 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
     if (deleting) fr.spotifeur.presentation.components.DeletePlaylistDialog(model, current, onDismiss = { deleting = false }) {
         navController.popBackStack()
     }
+}
+
+/** The search field item sits above the page's first visible item. */
+private const val PLAYLIST_FILTER_ITEMS = 1
+
+/** Title, artists or album contain every word of [query], ignoring case and accents. */
+internal fun Song.matchesPlaylistFilter(query: String): Boolean = fr.spotifeur.utils.matchesWords(query, title, displayArtist, album)
+
+@Composable
+private fun PlaylistFilterField(value: String, enabled: Boolean, onChange: (String) -> Unit) {
+    androidx.compose.material3.OutlinedTextField(
+        value = value, onValueChange = onChange, enabled = enabled, singleLine = true,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        placeholder = { Text(stringResource(R.string.playlist_filter_hint)) },
+        leadingIcon = { Icon(Icons.Rounded.Search, null) },
+        trailingIcon = if (value.isNotEmpty()) ({
+            IconButton(onClick = { onChange("") }) { Icon(Icons.Rounded.Close, stringResource(R.string.playlist_filter_clear)) }
+        }) else null,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+    )
 }

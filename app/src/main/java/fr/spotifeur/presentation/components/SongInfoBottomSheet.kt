@@ -145,8 +145,10 @@ fun SongInfoBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val infoShape = RoundedCornerShape(16.dp)
     val discovery by playerViewModel.model.discovery.collectAsStateWithLifecycle()
-    // Likes, radios, albums and artists are Spotify pages: they need a Spotify track and an account.
+    // Likes and radios are Spotify features: they need a Spotify track and an account.
     val spotifyPages = song.source == fr.spotifeur.data.MusicSource.Spotify && discovery.spotifyEnabled
+    // Albums and artists open on Spotify with an account, on YouTube Music otherwise (issue #8).
+    val catalogPages = !song.isLocal
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -189,7 +191,7 @@ fun SongInfoBottomSheet(
                 icon = Icons.Rounded.Album,
                 iconDescription = stringResource(R.string.song_info_album_label),
                 shape = infoShape,
-                onClick = if (spotifyPages) onNavigateToAlbum else null,
+                onClick = if (catalogPages) onNavigateToAlbum else null,
             )
             SongInfoSegmentedListItem(
                 headline = stringResource(R.string.song_info_artist_label),
@@ -197,7 +199,7 @@ fun SongInfoBottomSheet(
                 icon = Icons.Rounded.Person,
                 iconDescription = stringResource(R.string.song_info_artist_label),
                 shape = infoShape,
-                onClick = if (spotifyPages) onNavigateToArtist else null,
+                onClick = if (catalogPages) onNavigateToArtist else null,
             )
             if (removeFromListTrigger != null) {
                 TextButton(onClick = removeFromListTrigger, modifier = Modifier.fillMaxWidth()) {

@@ -121,6 +121,7 @@ import fr.spotifeur.presentation.components.subcomps.FetchLyricsDialog
 import fr.spotifeur.presentation.components.LyricsSheet
 import fr.spotifeur.data.model.Artist
 import fr.spotifeur.data.model.Song
+import androidx.compose.material.icons.rounded.MoreVert
 import fr.spotifeur.data.preferences.AlbumArtQuality
 import fr.spotifeur.data.preferences.CarouselStyle
 import fr.spotifeur.data.preferences.FullPlayerLoadingTweaks
@@ -203,6 +204,7 @@ fun FullPlayerContent(
     onPrevious: () -> Unit,
     onCollapse: () -> Unit,
     onShowQueueClicked: () -> Unit,
+    onShowSongOptions: (Song) -> Unit = {},
     onQueueDragStart: () -> Unit,
     onQueueDrag: (Float) -> Unit,
     onQueueRelease: (Float, Float) -> Unit,
@@ -692,6 +694,20 @@ fun FullPlayerContent(
                                 Icon(
                                     painter = painterResource(R.drawable.rounded_queue_music_24),
                                     contentDescription = stringResource(R.string.player_cd_open_queue),
+                                    tint = playerAccentColor
+                                )
+                            }
+                            if (appSettings.showPlayerMenuButton) Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(playerOnAccentColor.copy(alpha = 0.7f))
+                                    .clickable { onShowSongOptions(song.copy(duration = totalDurationProvider().takeIf { it > 0 } ?: song.duration)) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Rounded.MoreVert,
+                                    contentDescription = stringResource(R.string.player_cd_more_options),
                                     tint = playerAccentColor
                                 )
                             }

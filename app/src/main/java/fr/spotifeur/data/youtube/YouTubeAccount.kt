@@ -48,13 +48,39 @@ object YouTubeAccount {
     val signedIn: Boolean get() = credential != null
 
     internal fun require(): YouTubeCredential = credential ?: throw YouTubeAuthRequired("Connect a Google account first.")
+    internal fun current(): YouTubeCredential? = credential
 
     /** Blocking: checks the cookies with the account menu, then keeps them. */
     fun connect(cookie: String, visitorData: String?, dataSyncId: String?): YouTubeAccountInfo {
-        val value = YouTubeCredential(cookie, visitorData?.takeIf(String::isNotBlank), dataSyncId?.takeIf(String::isNotBlank))
-        val account = YouTubeLibrary.accountInfo(value)
-        save(value, account)
-        return account
+        val full = YouTubeCredential(cookie, visitorData?.takeIf(String::isNotBlank), dataSyncId?.takeIf(String::isNotBlank))
+        // The identities read from the page can be refused (HTTP 403) while the cookies alone open the
+        // account: without the brand-account delegation first, then without the page's visitor identity.
+        val candidates = listOf(full, full.copy(dataSyncId = null), full.copy(visitorData = null, dataSyncId = null)).distinct()
+        var refused: YouTubeFailure? = null
+        // A session Google has just opened can be refused for a few seconds: each form is tried twice.
+        for ((attempt, value) in candidates.withIndex()) repeat(2) { round ->
+            try {
+                val account = YouTubeLibrary.accountInfo(value)
+                if (attempt > 0 || round > 0) fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube-account", "connected with fallback $attempt, try ${round + 1}")
+                save(value, account)
+                return account
+            } catch (failure: YouTubeFailure) {
+                if (failure.status != "403") throw failure
+                refused = failure
+                if (round == 0) Thread.sleep(CONNECT_RETRY_MS)
+            }
+        }
+        throw refused ?: YouTubeAuthRequired("Google did not open a YouTube Music session.")
+    }
+
+    /** A delegation the service refused: requests go on as the main account. */
+    internal fun dropDelegation() {
+        val current = credential ?: return
+        if (current.dataSyncId == null) return
+        val updated = current.copy(dataSyncId = null)
+        credential = updated
+        runCatching { write(updated) }
+        fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube-account", "delegation refused, using the main account")
     }
 
     internal fun save(value: YouTubeCredential, account: YouTubeAccountInfo) {
@@ -131,6 +157,7 @@ object YouTubeAccount {
         YouTubeAccountInfo(json.getString("name"), json.optString("handle"), json.optString("photo").takeIf(String::isNotBlank))
     }.getOrNull()
 
+    private const val CONNECT_RETRY_MS = 2_500L
     private const val KEY_ALIAS = "spotifeur-youtube-account"
     private const val KEY_CREDENTIAL = "credential"
     private const val KEY_INFO = "info"

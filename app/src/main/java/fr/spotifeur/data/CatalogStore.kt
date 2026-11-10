@@ -71,7 +71,36 @@ internal fun encodeDetail(detail: CatalogDetail): String = JSONObject()
     .put("related", JSONArray(encodePins(detail.related)))
     .put("nextPage", detail.nextPage ?: JSONObject.NULL)
     .put("total", detail.total)
+    .apply { detail.artist?.let { put("artist", encodeArtistProfile(it)) } }
     .toString()
+
+private fun encodeArtistProfile(profile: ArtistProfile): JSONObject = JSONObject()
+    .put("monthlyListeners", profile.monthlyListeners ?: JSONObject.NULL)
+    .put("worldRank", profile.worldRank ?: JSONObject.NULL)
+    .put("playCounts", JSONObject(profile.playCounts as Map<*, *>))
+    .put("popularReleases", JSONArray(profile.popularReleases))
+    .put("albums", JSONArray(profile.albums))
+    .put("singles", JSONArray(profile.singles))
+    .put("compilations", JSONArray(profile.compilations))
+    .put("appearsOn", JSONArray(profile.appearsOn))
+    .put("biography", profile.biography)
+    .put("headerImageUrl", profile.headerImageUrl ?: JSONObject.NULL)
+    .put("approximate", profile.approximate)
+
+private fun decodeArtistProfile(json: JSONObject): ArtistProfile {
+    fun ids(name: String) = json.optJSONArray(name)?.let { list -> (0 until list.length()).map(list::getString) }.orEmpty()
+    val counts = json.optJSONObject("playCounts")
+    return ArtistProfile(
+        monthlyListeners = if (json.isNull("monthlyListeners")) null else json.optLong("monthlyListeners"),
+        worldRank = if (json.isNull("worldRank")) null else json.optInt("worldRank"),
+        playCounts = counts?.keys()?.asSequence()?.associateWith { counts.getLong(it) }.orEmpty(),
+        popularReleases = ids("popularReleases"), albums = ids("albums"), singles = ids("singles"),
+        compilations = ids("compilations"), appearsOn = ids("appearsOn"),
+        biography = json.optString("biography"),
+        headerImageUrl = if (json.isNull("headerImageUrl")) null else json.optString("headerImageUrl"),
+        approximate = json.optBoolean("approximate"),
+    )
+}
 
 internal fun decodeDetail(text: String): CatalogDetail? = try {
     val json = JSONObject(text)
@@ -82,6 +111,7 @@ internal fun decodeDetail(text: String): CatalogDetail? = try {
             related = decodePins(json.getJSONArray("related").toString()),
             nextPage = if (json.isNull("nextPage")) null else json.getString("nextPage"),
             total = json.getInt("total"),
+            artist = json.optJSONObject("artist")?.let(::decodeArtistProfile),
         )
     }
 } catch (_: org.json.JSONException) { null }

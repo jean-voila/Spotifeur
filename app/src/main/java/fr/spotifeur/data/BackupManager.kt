@@ -26,7 +26,7 @@ class BackupManager(
     private val app = context.applicationContext
     private val settings = SettingsStore.get(app)
 
-    suspend fun export(searchHistory: List<String>): String {
+    suspend fun export(searchHistory: List<Music>): String {
         val equalizer = JSONObject()
         app.equalizerDataStore.data.first().asMap().forEach { (key, value) ->
             equalizer.put(key.name, JSONObject().put("type", value::class.java.simpleName).put("value", value.toString()))
@@ -36,19 +36,22 @@ class BackupManager(
             .put("settings", settings.settings.value.toJson())
             .put("pins", JSONArray(encodePins(pins.pins.value)))
             .put("localPlaylists", JSONArray(encodeLocalPlaylists(playlists.playlists.value)))
-            .put("searchHistory", JSONArray(searchHistory))
+            .put("searchHistory", JSONArray(encodePins(searchHistory)))
             .put("equalizer", equalizer)
             .toString(2)
     }
 
     /** Validates the whole file before changing anything. Returns the search history to restore. */
-    suspend fun restore(content: String): List<String> {
+    suspend fun restore(content: String): List<Music> {
         val root = JSONObject(content)
         require(root.optString("format") == FORMAT) { "Not a Spotifeur backup" }
         val restoredSettings = AppSettings.fromJson(root.getJSONObject("settings"))
         val restoredPins = decodePins(root.getJSONArray("pins").toString())
         val restoredPlaylists = decodeLocalPlaylists(root.getJSONArray("localPlaylists").toString())
-        val history = root.optJSONArray("searchHistory")?.let { list -> List(list.length()) { list.getString(it) } }.orEmpty()
+        // Older backups hold typed queries (strings): only result entries are kept.
+        val history = root.optJSONArray("searchHistory")?.let { list ->
+            decodePins(JSONArray((0 until list.length()).mapNotNull { list.optJSONObject(it) }).toString())
+        }.orEmpty()
         settings.update { restoredSettings }
         pins.replaceAll(restoredPins)
         playlists.replaceAll(restoredPlaylists)

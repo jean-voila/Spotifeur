@@ -65,7 +65,6 @@ import fr.spotifeur.SpotifeurModel
 import fr.spotifeur.data.Music
 import fr.spotifeur.data.MusicKind
 import fr.spotifeur.data.model.SearchFilterType
-import fr.spotifeur.data.model.SearchHistoryItem
 import fr.spotifeur.data.model.Song
 import fr.spotifeur.data.model.toAlbum
 import fr.spotifeur.data.model.toArtist
@@ -109,25 +108,36 @@ fun SearchScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val statusBarTopInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
     val colorScheme = MaterialTheme.colorScheme
-    val results = remember(discovery.results, filter, discovery.activeSource) {
-        val kind = filter.kind().takeIf { discovery.activeSource == fr.spotifeur.SearchSource.Spotify }
+    val appSettings by ui.settings.collectAsStateWithLifecycle()
+    val showSources = appSettings.showSearchSources
+    // With the choice hidden, every search reads all sources.
+    LaunchedEffect(showSources) {
+        if (!showSources && discovery.source != fr.spotifeur.SearchSource.All) model.setSearchSource(fr.spotifeur.SearchSource.All)
+    }
+    val results = remember(discovery.results, filter) {
+        val kind = filter.kind()
         discovery.results.filter { kind == null || it.kind == kind }
     }
     val songs = remember(results, saved) { results.filter { it.kind == MusicKind.Track }.map { it.toSong(it.id in saved) } }
     val listState = rememberLazyListState()
     val open: (Music) -> Unit = {
-        ui.rememberSearch(searchQuery)
+        ui.rememberSearchResult(it)
         navController.openMusic(ui, it)
+    }
+    val playFromHistory: (Music) -> Unit = { item ->
+        ui.rememberSearchResult(item)
+        if (item.kind == MusicKind.Track) item.toSong(item.id in saved).let { song -> ui.playSongs(listOf(song), song, item.title) }
+        else navController.openMusic(ui, item)
     }
     var optionsFor by remember { mutableStateOf<Music?>(null) }
     val showOptions: (Music) -> Unit = {
         // The long-click handler of the card already vibrates.
         optionsFor = it
     }
-    LaunchedEffect(listState, results.size, discovery.nextPage) {
+    LaunchedEffect(listState, results.size, discovery.hasMore) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .distinctUntilChanged()
-            .collect { last -> if (discovery.nextPage != null && last >= listState.layoutInfo.totalItemsCount - 6) model.searchNext() }
+            .collect { last -> if (discovery.hasMore && last >= listState.layoutInfo.totalItemsCount - 6) model.searchNext() }
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -156,7 +166,6 @@ fun SearchScreen(
                                     model.search(it)
                                 },
                                 onSearch = { query ->
-                                    ui.rememberSearch(query)
                                     model.search(query, false)
                                     keyboard?.hide()
                                 },
@@ -229,34 +238,35 @@ fun SearchScreen(
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 if (searchQuery.isBlank()) {
                     if (history.isNotEmpty()) {
-                        SearchHistoryList(
-                            historyItems = history.map { SearchHistoryItem(query = it, timestamp = 0L) },
-                            onHistoryClick = {
-                                searchQuery = it
-                                model.search(it, false)
-                            },
-                            onHistoryDelete = ui::forgetSearch,
-                            onClearAllHistory = ui::clearSearchHistory,
+                        SearchResultHistoryList(
+                            items = history,
+                            onOpen = playFromHistory,
+                            onDelete = ui::forgetSearch,
+                            onClearAll = ui::clearSearchHistory,
+                            bottomPadding = paddingValues.calculateBottomPadding() + MiniPlayerHeight + 24.dp,
                         )
                     }
                 } else {
-                    if (discovery.spotifyEnabled) {
-                        // The catalogue searched: Spotify, or YouTube Music without any account.
-                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp)) {
-                            val sources = fr.spotifeur.SearchSource.entries
-                            sources.forEachIndexed { index, source ->
-                                SegmentedButton(
-                                    selected = discovery.source == source,
-                                    onClick = { model.setSearchSource(source) },
-                                    shape = SegmentedButtonDefaults.itemShape(index, sources.size),
-                                ) {
-                                    Text(stringResource(if (source == fr.spotifeur.SearchSource.Spotify) R.string.search_source_spotify else R.string.search_source_youtube))
-                                }
+                    // Everything at once by default; one catalogue, or the device, when the choice is shown (Settings → Behavior).
+                    val sources = fr.spotifeur.SearchSource.entries.filter { it != fr.spotifeur.SearchSource.Spotify || discovery.spotifyEnabled }
+                    if (showSources) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp)) {
+                        sources.forEachIndexed { index, source ->
+                            SegmentedButton(
+                                selected = discovery.activeSource == source,
+                                onClick = { model.setSearchSource(source) },
+                                shape = SegmentedButtonDefaults.itemShape(index, sources.size),
+                                icon = {},
+                            ) {
+                                Text(stringResource(when (source) {
+                                    fr.spotifeur.SearchSource.All -> R.string.search_source_all
+                                    fr.spotifeur.SearchSource.Spotify -> R.string.search_source_spotify
+                                    fr.spotifeur.SearchSource.YouTubeMusic -> R.string.search_source_youtube_short
+                                    fr.spotifeur.SearchSource.Local -> R.string.search_source_device
+                                }), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             }
                         }
                     }
-                    // YouTube Music results are tracks only.
-                    if (discovery.activeSource == fr.spotifeur.SearchSource.Spotify) FlowRow(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -285,53 +295,44 @@ fun SearchScreen(
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                listOf(
-                                    MusicKind.Track to R.string.library_tab_songs,
-                                    MusicKind.Album to R.string.library_tab_albums,
-                                    MusicKind.Artist to R.string.library_tab_artists,
-                                    MusicKind.Playlist to R.string.library_tab_playlists,
-                                ).forEach { (kind, title) ->
-                                    val group = results.filter { it.kind == kind }
-                                    if (group.isEmpty()) return@forEach
-                                    if (filter == SearchFilterType.ALL) item(key = "header-$kind") {
-                                        SearchResultSectionHeader(stringResource(title))
-                                    }
-                                    items(group, key = { "$kind-${it.id}" }, contentType = { kind }) { item ->
-                                        when (kind) {
-                                            MusicKind.Track -> {
-                                                val song = item.toSong(item.id in saved)
-                                                val current = stable.currentSong?.id == song.id
-                                                EnhancedSongListItem(
-                                                    song = song,
-                                                    isPlaying = current && stable.isPlaying,
-                                                    isCurrentSong = current,
-                                                    onMoreOptionsClick = { selected = it },
-                                                    onLongPress = { selected = song },
-                                                    onClick = {
-                                                        ui.rememberSearch(searchQuery)
-                                                        ui.playSongs(songs, song, searchQuery)
-                                                    },
-                                                )
-                                            }
-                                            MusicKind.Album -> SearchResultAlbumItem(
-                                                album = item.toAlbum(),
-                                                onOpenClick = { open(item) },
-                                                onPlayClick = { ui.shuffleItem(item) },
-                                                onLongPress = { showOptions(item) },
-                                            )
-                                            MusicKind.Artist -> SearchResultArtistItem(
-                                                artist = item.toArtist(),
-                                                onOpenClick = { open(item) },
-                                                onPlayClick = { ui.shuffleItem(item) },
-                                                onLongPress = { showOptions(item) },
-                                            )
-                                            else -> SearchResultPlaylistItem(
-                                                playlist = item.toPlaylist(),
-                                                onOpenClick = { open(item) },
-                                                onPlayClick = { ui.shuffleItem(item) },
-                                                onLongPress = { showOptions(item) },
+                                // "All": one list, most relevant first, kinds and sources mixed, as Spotify's own search.
+                                // A kind filter: that kind only, in the same order.
+                                items(results, key = { "${it.kind}-${it.id}" }, contentType = { it.kind }) { item ->
+                                    when (item.kind) {
+                                        MusicKind.Track -> {
+                                            val song = item.toSong(item.id in saved)
+                                            val current = stable.currentSong?.id == song.id
+                                            EnhancedSongListItem(
+                                                song = song,
+                                                isPlaying = current && stable.isPlaying,
+                                                isCurrentSong = current,
+                                                onMoreOptionsClick = { selected = it },
+                                                onLongPress = { selected = song },
+                                                onClick = {
+                                                    ui.rememberSearchResult(item)
+                                                    ui.playSongs(songs, song, searchQuery)
+                                                },
+                                                showSourceBadge = true,
                                             )
                                         }
+                                        MusicKind.Album -> SearchResultAlbumItem(
+                                            album = item.toAlbum(),
+                                            onOpenClick = { open(item) },
+                                            onPlayClick = { ui.shuffleItem(item) },
+                                            onLongPress = { showOptions(item) },
+                                        )
+                                        MusicKind.Artist -> SearchResultArtistItem(
+                                            artist = item.toArtist(),
+                                            onOpenClick = { open(item) },
+                                            onPlayClick = { ui.shuffleItem(item) },
+                                            onLongPress = { showOptions(item) },
+                                        )
+                                        else -> SearchResultPlaylistItem(
+                                            playlist = item.toPlaylist(),
+                                            onOpenClick = { open(item) },
+                                            onPlayClick = { ui.shuffleItem(item) },
+                                            onLongPress = { showOptions(item) },
+                                        )
                                     }
                                 }
                             }

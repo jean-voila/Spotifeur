@@ -222,6 +222,16 @@ internal class SpotifyPlaylists(private val context: Context) : AutoCloseable {
         if (status !in 200..299) throw SpotifyFailure("Playlist information is unavailable.", status)
         return response.message(2)?.message(2)?.message(1) ?: throw SpotifyFailure("Missing playlist information.")
     }
+    /**
+     * A page of a playlist read through the native core (`PlaylistDataService/Get`), as the official
+     * app reads it. Used when Playlist4 over HTTP refuses the request.
+     */
+    suspend fun page(uri: String, from: Int, length: Int, fallback: Music): PlaylistPage {
+        val response = request("spotify.playlist_esperanto.proto.PlaylistDataService", "Get", nativePageRequest(uri, from, length))
+        val status = response.message(1)?.number(1)
+        if (status !in 200..299) throw SpotifyFailure("Spotify playlist: native read refused (code $status).", status)
+        return decodeNativePlaylistPage(response, fallback, from)
+    }
     suspend fun isOwned(uri: String): Boolean = metadata(uri).number(4) == 1
     suspend fun published(uri: String): Boolean = rootEntry(uri)?.second ?: false
     suspend fun recommendations(uri: String, tracks: List<Music>, fallback: List<Music>): List<Music> {
@@ -292,6 +302,40 @@ internal fun playlistRowsRequest(uri: String, start: Int, length: Int): ByteArra
         writeBool(8, true)
     })
     writeByteArray(3, proto { writeByteArray(4, proto { writeBool(1, true); writeBool(9, true) }) })
+}
+/** `PlaylistDataService/Get` for a range of rows with the playlist's own metadata (name, length, picture). */
+internal fun nativePageRequest(uri: String, start: Int, length: Int): ByteArray = proto {
+    writeString(1, playlistUri(uri))
+    writeByteArray(2, proto {
+        writeByteArray(4, proto { writeInt32(1, start); writeInt32(2, length) })
+        writeBool(8, true)
+    })
+    writeByteArray(3, proto {
+        writeByteArray(1, proto { for (field in 1..30) writeBool(field, true) })
+        writeByteArray(4, proto { writeBool(1, true); writeBool(9, true) })
+    })
+}
+
+/**
+ * Response of [nativePageRequest]: 2 → 1 items (18 = URI, or 4 → 1), 2 → 2 → 1 playlist metadata
+ * (2 name, 6 length, 7 description, 8 → 1 picture URI).
+ */
+internal fun decodeNativePlaylistPage(response: Proto, fallback: Music, from: Int): PlaylistPage {
+    val result = response.message(2)
+    val raw = result?.messages(1).orEmpty()
+    val entries = raw.mapNotNull { item -> (item.text(18) ?: item.message(4)?.text(1))?.let(::playlistEntryUri) }
+    val meta = result?.message(2)?.message(1)
+    val total = meta?.number(6) ?: (from + raw.size)
+    val image = meta?.message(8)?.text(1)?.let(::spotifyArtwork) ?: fallback.imageUrl
+    return PlaylistPage(
+        item = fallback.copy(
+            title = meta?.text(2)?.takeIf(String::isNotBlank) ?: fallback.title,
+            subtitle = fr.spotifeur.utils.formatSongCount(total),
+            imageUrl = image, note = meta?.text(7) ?: fallback.note,
+        ),
+        uris = entries.filter { it.startsWith("spotify:track:") }, total = total, rawCount = raw.size,
+        hasMore = raw.isNotEmpty() && from + raw.size < total, entries = entries,
+    )
 }
 internal fun playlistModification(uri: String, modification: ByteArray): ByteArray = proto {
     writeString(1, playlistUri(uri)); writeByteArray(2, modification)

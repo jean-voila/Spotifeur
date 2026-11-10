@@ -221,7 +221,8 @@ internal class SpotifyHlsDataSource private constructor(
             val key = session.username() + ":" + track
             manifests[key]?.let { return it }
             val mode = if (nativeAudio) 4 else 1
-            index.audioId(track)?.takeIf { index.playableTrack(track) != null || !NetworkMonitor.online.value }?.let { known ->
+            // Tracks indexed before loudness was kept ask the service once more.
+            index.audioId(track)?.takeIf { (index.playableTrack(track) != null && index.loudness(track) != null) || !NetworkMonitor.online.value }?.let { known ->
                 return "https://$API_HOST/sneaktables/v2/hls/$mode/$known/master.m3u8".also { manifests[key] = it }
             }
             if (!NetworkMonitor.online.value) throw SpotifyFailure("This track is not available offline.")
@@ -249,6 +250,8 @@ internal class SpotifyHlsDataSource private constructor(
             val id = extension.bytes(4)?.takeIf { it.isNotEmpty() && it.size <= 64 }
                 ?: throw SpotifyFailure("Spotify did not provide the audio ID for this track.")
             val encoded = id.joinToString("") { "%02x".format(it.toInt() and 255) }
+            val normalization = extension.message(2)
+            index.rememberLoudness(track, normalization?.float(1) ?: Float.NaN, normalization?.float(2) ?: Float.NaN)
             index.rememberAudioId(track, encoded, playable)
             return "https://$API_HOST/sneaktables/v2/hls/$mode/$encoded/master.m3u8".also { manifests[key] = it }
         }

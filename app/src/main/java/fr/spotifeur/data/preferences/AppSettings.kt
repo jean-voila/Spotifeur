@@ -57,6 +57,14 @@ data class AppSettings(
     val streamingQualityWifi: String = "auto",
     val streamingQualityMobile: String = "auto",
     val downloadQuality: String = "very_high",
+    /** Loudness normalization of Spotify and YouTube Music tracks from the loudness each service publishes. */
+    val audioNormalization: Boolean = false,
+    /** The ⋮ button at the top right of the full player. */
+    val showPlayerMenuButton: Boolean = true,
+    /** Horizontal swipe on the mini player: [MINI_SWIPE_TRACKS], [MINI_SWIPE_DISMISS] or [MINI_SWIPE_OFF]. */
+    val miniPlayerSwipe: String = MINI_SWIPE_TRACKS,
+    /** The Spotify / YouTube / Device choice above search results. Hidden: every search reads all sources. */
+    val showSearchSources: Boolean = false,
 ) {
     fun actions(page: DetailPage): List<ActionSlot> =
         DetailActions.decode(page, if (page == DetailPage.ALBUM) albumActions else playlistActions)
@@ -79,7 +87,9 @@ data class AppSettings(
         .put("albumActions", albumActions).put("playlistActions", playlistActions)
         .put("swipeRight", swipeRight).put("swipeLeft", swipeLeft)
         .put("streamingQualityWifi", streamingQualityWifi).put("streamingQualityMobile", streamingQualityMobile)
-        .put("downloadQuality", downloadQuality)
+        .put("downloadQuality", downloadQuality).put("audioNormalization", audioNormalization)
+        .put("showPlayerMenuButton", showPlayerMenuButton).put("miniPlayerSwipe", miniPlayerSwipe)
+        .put("showSearchSources", showSearchSources)
 
     companion object {
         const val THEME_SYSTEM = "system"
@@ -89,6 +99,9 @@ data class AppSettings(
         const val TAB_HOME = "home"
         const val TAB_SEARCH = "search"
         const val TAB_LIBRARY = "library"
+        const val MINI_SWIPE_TRACKS = "tracks"
+        const val MINI_SWIPE_DISMISS = "dismiss"
+        const val MINI_SWIPE_OFF = "off"
 
         /** Unknown or missing fields keep their default, so old backups stay valid. */
         fun fromJson(json: JSONObject): AppSettings {
@@ -135,6 +148,11 @@ data class AppSettings(
                 streamingQualityWifi = json.optString("streamingQualityWifi", d.streamingQualityWifi),
                 streamingQualityMobile = json.optString("streamingQualityMobile", d.streamingQualityMobile),
                 downloadQuality = json.optString("downloadQuality", d.downloadQuality),
+                audioNormalization = json.optBoolean("audioNormalization", d.audioNormalization),
+                showPlayerMenuButton = json.optBoolean("showPlayerMenuButton", d.showPlayerMenuButton),
+                miniPlayerSwipe = json.optString("miniPlayerSwipe", d.miniPlayerSwipe)
+                    .takeIf { it in setOf(MINI_SWIPE_TRACKS, MINI_SWIPE_DISMISS, MINI_SWIPE_OFF) } ?: d.miniPlayerSwipe,
+                showSearchSources = json.optBoolean("showSearchSources", d.showSearchSources),
             )
         }
     }

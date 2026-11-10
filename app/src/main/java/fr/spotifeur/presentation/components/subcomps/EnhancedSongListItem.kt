@@ -81,7 +81,7 @@ private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float {
  * @param customShape Optional custom shape for the surface
  * @param isSelected Whether this item is selected in multi-selection mode
  * @param isSelectionMode Whether multi-selection mode is active
- * @param onLongPress Callback for long press gesture (activates selection)
+ * @param onLongPress Callback for long press gesture; without one, a long press opens the ⋮ menu
  * @param onMoreOptionsClick Callback for more options button
  * @param onClick Callback for tap gesture
  */
@@ -106,10 +106,13 @@ fun EnhancedSongListItem(
     /** Allows the swipe action "Remove from playlist" on this row. */
     onSwipeRemove: (() -> Unit)? = null,
     swipeEnabled: Boolean = true,
-    onLongPress: () -> Unit = {},
+    /** Replaces the artist line, such as a play count on an artist page. */
+    supportingText: String? = null,
+    onLongPress: (() -> Unit)? = null,
     onMoreOptionsClick: (Song) -> Unit,
     onClick: () -> Unit
 ) {
+    val longPress: () -> Unit = onLongPress ?: { onMoreOptionsClick(song) }
     val compact = fr.spotifeur.presentation.components.LocalCompactLists.current
     val albumArtSize = if (compact && albumArtSize == 50.dp) 38.dp else albumArtSize
     val rowPadding = if (compact) 6.dp else 12.dp
@@ -273,14 +276,13 @@ fun EnhancedSongListItem(
                         onTap = { 
                             if (isSelectionMode) {
                                 // In selection mode, tap toggles selection
-                                onLongPress()
+                                longPress()
                             } else {
                                 onClick() 
                             }
                         },
                         onLongPress = {
-                            // Long press always activates/toggles selection
-                            onLongPress()
+                            longPress()
                         }
                     )
                 },
@@ -369,7 +371,7 @@ fun EnhancedSongListItem(
                         }
                         TrackDownloadIndicator(song.id, song.title)
                         Text(
-                            text = LocalTrackQuality.current(song)?.let { "${song.displayArtist} · $it" } ?: song.displayArtist,
+                            text = supportingText ?: LocalTrackQuality.current(song)?.let { "${song.displayArtist} · $it" } ?: song.displayArtist,
                             style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                             color = contentColor.copy(alpha = 0.7f),
                             maxLines = 1,

@@ -73,6 +73,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import fr.spotifeur.data.Music
+import fr.spotifeur.data.MusicKind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -114,7 +117,6 @@ import kotlinx.coroutines.withContext
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import androidx.compose.ui.res.stringResource
 import fr.spotifeur.data.model.SearchFilterType
-import fr.spotifeur.data.model.SearchHistoryItem
 import fr.spotifeur.presentation.components.AutoScrollingText
 import fr.spotifeur.R
 import fr.spotifeur.data.model.Song
@@ -143,90 +145,6 @@ fun SearchResultSectionHeader(title: String) {
             .fillMaxWidth()
             .padding(vertical = 8.dp, horizontal = 4.dp)
     )
-}
-
-@Composable
-fun SearchHistoryList(
-    historyItems: List<SearchHistoryItem>,
-    onHistoryClick: (String) -> Unit,
-    onHistoryDelete: (String) -> Unit,
-    onClearAllHistory: () -> Unit
-) {
-    val localDensity = LocalDensity.current
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                stringResource(R.string.search_recent_searches),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            if (historyItems.isNotEmpty()) {
-                TextButton(onClick = onClearAllHistory) {
-                    Text(stringResource(R.string.search_action_clear_all), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(
-                top = 8.dp,
-            )
-        ) {
-            items(historyItems, key = { "history_${it.id ?: it.query}" }, contentType = { "search_history" }) { item ->
-                SearchHistoryListItem(
-                    item = item,
-                    onHistoryClick = onHistoryClick,
-                    onHistoryDelete = onHistoryDelete
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SearchHistoryListItem(
-    item: SearchHistoryItem,
-    onHistoryClick: (String) -> Unit,
-    onHistoryDelete: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onTap = { onHistoryClick(item.query) }) }
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Icon(
-                imageVector = Icons.Rounded.History,
-                contentDescription = stringResource(R.string.search_cd_search_history_icon),
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = item.query,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        IconButton(onClick = { onHistoryDelete(item.query) }) {
-            Icon(
-                imageVector = Icons.Rounded.DeleteForever,
-                contentDescription = stringResource(R.string.search_cd_delete_search_history_item),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-        }
-    }
 }
 
 @Composable
@@ -675,4 +593,62 @@ fun SearchFilterChip(
              null
          }
     )
+}
+
+/** What was opened or played from search, with its picture, kind and a button to remove it. */
+@Composable
+fun SearchResultHistoryList(
+    items: List<Music>,
+    onOpen: (Music) -> Unit,
+    onDelete: (Music) -> Unit,
+    onClearAll: () -> Unit,
+    bottomPadding: androidx.compose.ui.unit.Dp,
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.search_recent_searches), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onClearAll) {
+                Text(stringResource(R.string.search_action_clear_all), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(top = 4.dp, bottom = bottomPadding),
+        ) {
+            items(items, key = { "history_${it.kind}_${it.id}" }, contentType = { "search_history" }) { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable { onOpen(item) }.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    fr.spotifeur.presentation.components.SmartImage(
+                        model = item.imageUrl, contentDescription = null,
+                        shape = if (item.kind == MusicKind.Artist) CircleShape else RoundedCornerShape(8.dp),
+                        modifier = Modifier.size(52.dp),
+                    )
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val kind = stringResource(when (item.kind) {
+                            MusicKind.Track -> R.string.search_history_kind_track
+                            MusicKind.Album -> R.string.search_history_kind_album
+                            MusicKind.Artist -> R.string.search_history_kind_artist
+                            else -> R.string.search_history_kind_playlist
+                        })
+                        val detail = item.subtitle.takeIf { it.isNotBlank() && item.kind != MusicKind.Artist }
+                        Text(listOfNotNull(kind, detail).joinToString(" • "), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    IconButton(onClick = { onDelete(item) }) {
+                        Icon(Icons.Rounded.Close, stringResource(R.string.search_cd_delete_search_history_item),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                }
+            }
+        }
+    }
 }

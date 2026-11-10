@@ -176,6 +176,7 @@ internal fun UnifiedPlayerSongInfoLayer(
     selectedSongForInfo?.let { staticSong ->
         val favorites by playerViewModel.model.favorites.collectAsStateWithLifecycle()
         val liveSong = staticSong.copy(isFavorite = staticSong.id in favorites)
+        val playing by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
         MaterialTheme(
             colorScheme = albumColorScheme,
             typography = MaterialTheme.typography,
@@ -199,10 +200,11 @@ internal fun UnifiedPlayerSongInfoLayer(
                 onNavigateToAlbum = { onNavigateToAlbum(liveSong) },
                 onNavigateToArtist = { onNavigateToArtist(liveSong) },
                 onStartRadio = { onStartRadio(liveSong) },
-                removeFromListTrigger = {
+                // The playing track (the full player's ⋮ button) is not removed from the queue from here.
+                removeFromListTrigger = if (playing.currentSong?.id == liveSong.id) null else ({
                     playerViewModel.removeSongFromQueue(liveSong.id)
                     onDismissSongInfo()
-                }
+                })
             )
         }
     }

@@ -15,6 +15,9 @@ internal data class AudioFileRecord(val hex: String, val expectedBytes: Long, va
 
 internal const val YOUTUBE_FILE_PREFIX = "yt-"
 
+/** JSON has no NaN: absent values are written as null and read back as NaN. */
+private fun Float.toSafeJson(): Any = if (isNaN()) JSONObject.NULL else toDouble()
+
 internal data class AudioRecord(
     val track: Music,
     val file: AudioFileRecord? = null,
@@ -34,6 +37,8 @@ internal class AudioIndex private constructor(context: Context) {
     private val playableTracks = HashMap<String, String>()
     private val records = HashMap<String, AudioRecord>()
     private val playlistOwners = HashMap<String, String>()
+    /** Spotify's file normalization per track: loudness and true peak in dB; NaN when the service gives none. */
+    private val loudness = HashMap<String, FloatArray>()
     private var dirty = false
     private var lastWrite = 0L
 
@@ -45,6 +50,11 @@ internal class AudioIndex private constructor(context: Context) {
         val different = audioIds.put(track, id) != id
         val relinked = playable != null && playableTracks.put(track, playable) != playable
         if (different || relinked) changed()
+    }
+    @Synchronized fun loudness(track: String): FloatArray? = loudness[track]
+    @Synchronized fun rememberLoudness(track: String, loudnessDb: Float, truePeakDb: Float) {
+        val value = floatArrayOf(loudnessDb, truePeakDb)
+        if (!value.contentEquals(loudness.put(track, value))) changed()
     }
     @Synchronized fun rememberPlaylistOwner(url: String, track: String) {
         if (playlistOwners.put(url, track) != track) changed()
@@ -113,6 +123,9 @@ internal class AudioIndex private constructor(context: Context) {
             .put("audioIds", JSONObject(audioIds as Map<*, *>))
             .put("playableTracks", JSONObject(playableTracks as Map<*, *>))
             .put("owners", JSONObject(playlistOwners as Map<*, *>))
+            .put("loudness", JSONObject().apply {
+                loudness.forEach { (track, value) -> put(track, JSONArray().put(value[0].toSafeJson()).put(value[1].toSafeJson())) }
+            })
             .put("records", JSONArray().apply {
                 records.values.forEach { record ->
                     put(JSONObject()
@@ -138,6 +151,10 @@ internal class AudioIndex private constructor(context: Context) {
             json.getJSONObject("audioIds").let { ids -> ids.keys().forEach { audioIds[it] = ids.getString(it) } }
             json.optJSONObject("playableTracks")?.let { ids -> ids.keys().forEach { playableTracks[it] = ids.getString(it) } }
             json.getJSONObject("owners").let { owners -> owners.keys().forEach { playlistOwners[it] = owners.getString(it) } }
+            json.optJSONObject("loudness")?.let { values -> values.keys().forEach { track ->
+                val pair = values.getJSONArray(track)
+                loudness[track] = floatArrayOf(pair.optDouble(0, Double.NaN).toFloat(), pair.optDouble(1, Double.NaN).toFloat())
+            } }
             val list = json.getJSONArray("records")
             for (index in 0 until list.length()) {
                 val entry = list.getJSONObject(index)

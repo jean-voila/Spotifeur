@@ -389,6 +389,8 @@ fun UnifiedPlayerSheetV2(
     )
 
     val hapticFeedback = LocalHapticFeedback.current
+    val swipeSettings by playerViewModel.settings.collectAsStateWithLifecycle()
+    val miniSwipe = swipeSettings.miniPlayerSwipe
     val miniDismissGestureHandler = rememberMiniPlayerDismissGestureHandler(
         scope = scope,
         density = density,
@@ -396,7 +398,9 @@ fun UnifiedPlayerSheetV2(
         offsetAnimatable = offsetAnimatable,
         screenWidthPx = screenWidthPx,
         onDismissPlaylistAndShowUndo = { playerViewModel.dismissPlaylistAndShowUndo() },
-        onDismissStarted = { playerViewModel.setMiniPlayerDismissing(true) }
+        onDismissStarted = { playerViewModel.setMiniPlayerDismissing(true) },
+        swipeChangesTrack = miniSwipe == fr.spotifeur.data.preferences.AppSettings.MINI_SWIPE_TRACKS,
+        onSwipeTrack = { next -> if (next) playerViewModel.nextSong() else playerViewModel.previousTrack() },
     )
 
     QueueSheetRuntimeEffects(
@@ -647,7 +651,8 @@ fun UnifiedPlayerSheetV2(
                                 }
                             }
                             .miniPlayerDismissHorizontalGesture(
-                                enabled = currentSheetContentState == PlayerSheetState.COLLAPSED,
+                                enabled = currentSheetContentState == PlayerSheetState.COLLAPSED &&
+                                    miniSwipe != fr.spotifeur.data.preferences.AppSettings.MINI_SWIPE_OFF,
                                 handler = miniDismissGestureHandler
                             )
                             .playerSheetVerticalDragGesture(
@@ -689,6 +694,7 @@ fun UnifiedPlayerSheetV2(
                             currentHorizontalPaddingStartPxProvider = currentHorizontalPaddingStartPxProvider,
                             currentHorizontalPaddingEndPxProvider = currentHorizontalPaddingEndPxProvider,
                             onShowQueueClicked = sheetActionHandlers.openQueueSheet,
+                    onShowSongOptions = { song -> sheetActionHandlers.onSelectedSongForInfoChange(song) },
                             onQueueDragStart = sheetActionHandlers.beginQueueDrag,
                             onQueueDrag = sheetActionHandlers.dragQueueBy,
                             onQueueRelease = sheetActionHandlers.endQueueDrag
@@ -710,6 +716,7 @@ fun UnifiedPlayerSheetV2(
                     isCastConnecting = isCastConnecting,
                     isFavorite = isFavorite,
                     onShowQueueClicked = sheetActionHandlers.openQueueSheet,
+                    onShowSongOptions = { song -> sheetActionHandlers.onSelectedSongForInfoChange(song) },
                     onQueueDragStart = sheetActionHandlers.beginQueueDrag,
                     onQueueDrag = sheetActionHandlers.dragQueueBy,
                     onQueueRelease = sheetActionHandlers.endQueueDrag

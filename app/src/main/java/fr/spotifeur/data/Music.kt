@@ -31,6 +31,7 @@ val Music.source: MusicSource get() = musicSourceOf(id)
 
 fun musicSourceOf(id: String): MusicSource = when {
     isLocalTrackId(id) -> MusicSource.Local
-    id.startsWith(fr.spotifeur.data.youtube.YTM_TRACK_PREFIX) -> MusicSource.YouTubeMusic
+    id.startsWith(fr.spotifeur.data.youtube.YTM_TRACK_PREFIX) || id.startsWith(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX) ||
+        id.startsWith(fr.spotifeur.data.youtube.YTM_ARTIST_PREFIX) -> MusicSource.YouTubeMusic
     else -> MusicSource.Spotify
 }

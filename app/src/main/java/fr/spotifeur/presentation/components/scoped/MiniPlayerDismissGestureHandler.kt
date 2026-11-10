@@ -36,7 +36,10 @@ internal class MiniPlayerDismissGestureHandler(
     private val offsetAnimatable: Animatable<Float, AnimationVector1D>,
     private val screenWidthPx: Float,
     private val onDismissPlaylistAndShowUndo: () -> Unit,
-    private val onDismissStarted: () -> Unit = {}
+    private val onDismissStarted: () -> Unit = {},
+    /** True: a horizontal swipe changes track (left: next, right: previous) instead of closing the player. */
+    private val swipeChangesTrack: () -> Boolean = { false },
+    private val onSwipeTrack: (next: Boolean) -> Unit = {},
 ) {
     private var dragPhase: MiniDismissDragPhase = MiniDismissDragPhase.IDLE
     private var accumulatedDragX: Float = 0f
@@ -105,6 +108,7 @@ internal class MiniPlayerDismissGestureHandler(
     fun onDragEnd() {
         dragPhase = MiniDismissDragPhase.IDLE
         offsetJob?.cancel()
+        if (swipeChangesTrack()) { endTrackSwipe(); return }
         val dismissThreshold = screenWidthPx * 0.4f
         if (abs(accumulatedDragX) > dismissThreshold) {
             onDismissStarted()
@@ -132,6 +136,25 @@ internal class MiniPlayerDismissGestureHandler(
             }
         }
     }
+
+    /** The card leaves on the swiped side, the track changes, and the card comes back from the other side. */
+    private fun endTrackSwipe() {
+        val threshold = screenWidthPx * 0.25f
+        if (abs(accumulatedDragX) <= threshold) {
+            offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                offsetAnimatable.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+            }
+            return
+        }
+        val next = accumulatedDragX < 0
+        val exit = if (next) -screenWidthPx else screenWidthPx
+        offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            offsetAnimatable.animateTo(exit, tween(durationMillis = 160, easing = FastOutSlowInEasing))
+            onSwipeTrack(next)
+            offsetAnimatable.snapTo(-exit * 0.6f)
+            offsetAnimatable.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow))
+        }
+    }
 }
 
 @Composable
@@ -142,10 +165,14 @@ internal fun rememberMiniPlayerDismissGestureHandler(
     offsetAnimatable: Animatable<Float, AnimationVector1D>,
     screenWidthPx: Float,
     onDismissPlaylistAndShowUndo: () -> Unit,
-    onDismissStarted: () -> Unit
+    onDismissStarted: () -> Unit,
+    swipeChangesTrack: Boolean = false,
+    onSwipeTrack: (next: Boolean) -> Unit = {},
 ): MiniPlayerDismissGestureHandler {
     val onDismissPlaylistAndShowUndoState = rememberUpdatedState(onDismissPlaylistAndShowUndo)
     val onDismissStartedState = rememberUpdatedState(onDismissStarted)
+    val swipeChangesTrackState = rememberUpdatedState(swipeChangesTrack)
+    val onSwipeTrackState = rememberUpdatedState(onSwipeTrack)
     return remember(scope, density, hapticFeedback, offsetAnimatable, screenWidthPx) {
         MiniPlayerDismissGestureHandler(
             scope = scope,
@@ -154,7 +181,9 @@ internal fun rememberMiniPlayerDismissGestureHandler(
             offsetAnimatable = offsetAnimatable,
             screenWidthPx = screenWidthPx,
             onDismissPlaylistAndShowUndo = { onDismissPlaylistAndShowUndoState.value() },
-            onDismissStarted = { onDismissStartedState.value() }
+            onDismissStarted = { onDismissStartedState.value() },
+            swipeChangesTrack = { swipeChangesTrackState.value },
+            onSwipeTrack = { next -> onSwipeTrackState.value(next) },
         )
     }
 }

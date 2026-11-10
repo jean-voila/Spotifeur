@@ -26,6 +26,8 @@ Ask Extended Metadata for extension kind **5** on the track URI (see [04-catalog
 | 3 | Default album normalization |
 | 4 | `audio_id` (16 bytes) |
 
+`NormalizationParams` has 1 `loudness_db` and 2 `true_peak_db`, both `float` (wire type 5). Spotifeur's volume normalization (off by default) aims at −14 LUFS, keeps 1 dB under the true peak, and only lowers the output volume: quieter tracks keep their level. **Tested with doubles.**
+
 If the track has no files, follow its `alternative` first (see [unavailable releases](04-catalog.md#unavailable-releases)).
 
 ## HLS manifests

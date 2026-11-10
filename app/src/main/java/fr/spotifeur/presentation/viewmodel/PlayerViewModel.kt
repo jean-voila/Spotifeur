@@ -317,8 +317,13 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
     // Transport ---------------------------------------------------------------------------------
     private val casting: Boolean get() = cast.isRemotePlaybackActive.value
     fun playPause() = if (casting) cast.togglePlayback() else model.player.toggle()
+    /** How many tracks the user queued after the current one, for the queue's sections. */
+    val queuedCount: StateFlow<Int> = model.player.state.map { it.queuedCount }.distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, 0)
     fun nextSong() = if (casting) cast.next() else model.player.next()
     fun previousSong() = if (casting) cast.previous() else model.player.previous()
+    /** The previous track itself, whatever the position in the current one (mini player swipe). */
+    fun previousTrack() = if (casting) cast.previous() else model.player.previousTrack()
     fun seekTo(position: Long) =
         if (casting) cast.seek(position) else model.player.seek(position.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
     fun toggleShuffle() = model.player.shuffle()
@@ -408,21 +413,21 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
     }
 
     // Search history ----------------------------------------------------------------------------
+    // What was opened or played from search, most recent first, as the official app keeps it.
     private val mutableHistory = MutableStateFlow(readHistory())
-    val searchHistory: StateFlow<List<String>> = mutableHistory.asStateFlow()
-    private fun readHistory(): List<String> = try {
-        val array = JSONArray(uiPrefs.getString(KEY_HISTORY, "[]"))
-        List(array.length()) { array.getString(it) }
-    } catch (_: org.json.JSONException) { emptyList() }
-    private fun writeHistory(items: List<String>) {
+    val searchHistory: StateFlow<List<Music>> = mutableHistory.asStateFlow()
+    private fun readHistory(): List<Music> {
+        // Typed queries were kept before; they are not results and are dropped.
+        if (uiPrefs.contains(KEY_HISTORY)) uiPrefs.edit { remove(KEY_HISTORY) }
+        return fr.spotifeur.data.decodePins(uiPrefs.getString(KEY_HISTORY_ITEMS, null))
+    }
+    private fun writeHistory(items: List<Music>) {
         mutableHistory.value = items
-        uiPrefs.edit { putString(KEY_HISTORY, JSONArray(items).toString()) }
+        uiPrefs.edit { putString(KEY_HISTORY_ITEMS, fr.spotifeur.data.encodePins(items)) }
     }
-    fun rememberSearch(query: String) {
-        val clean = query.trim()
-        if (clean.length >= 2) writeHistory((listOf(clean) + mutableHistory.value.filterNot { it.equals(clean, true) }).take(MAX_HISTORY))
-    }
-    fun forgetSearch(query: String) = writeHistory(mutableHistory.value - query)
+    fun rememberSearchResult(item: Music) =
+        writeHistory((listOf(item) + mutableHistory.value.filterNot { it.id == item.id }).take(MAX_HISTORY))
+    fun forgetSearch(item: Music) = writeHistory(mutableHistory.value.filterNot { it.id == item.id })
     fun clearSearchHistory() = writeHistory(emptyList())
 
     // Queue -------------------------------------------------------------------------------------
@@ -709,10 +714,11 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
 
     companion object {
         private const val KEY_HISTORY = "search_history"
+        private const val KEY_HISTORY_ITEMS = "search_history_items"
         private const val KEY_LYRICS_OFFSET = "lyrics_offset_"
         const val KEY_PLAYLIST_SORT = "playlist_sort_"
         private const val KEY_QUALITY = "measured_quality"
-        private const val MAX_HISTORY = 20
+        private const val MAX_HISTORY = 30
         private const val QUEUE_UNDO_MS = 4000L
         private const val UNDO_SEEK_DELAY_MS = 600L
     }

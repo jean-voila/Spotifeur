@@ -275,6 +275,7 @@ fun QueueBottomSheet(
 
     // Read show queue history preference
     val settingsState by viewModel.settings.collectAsStateWithLifecycle()
+    val queuedState = remember(viewModel) { viewModel.queuedCount }.collectAsStateWithLifecycle()
     val showQueueHistory = settingsState.showQueueHistory
 
     // Offset to convert display indices to queue indices when history is hidden.
@@ -821,6 +822,8 @@ fun QueueBottomSheet(
                                 Spacer(modifier = Modifier.height(6.dp))
                             }
 
+                            // The tracks the user queued come first, apart from the rest of the list being played.
+                            val queuedCount = queuedState.value
                             items(
                                 count = displaySongCount,
                                 key = { index -> activeKeyAt(index) },
@@ -858,6 +861,21 @@ fun QueueBottomSheet(
                                         label = "scaleAnimation"
                                     )
 
+                                    val firstQueued = queuedCount > 0 && queueIndex == currentSongIndex + 1
+                                    val firstFromList = queuedCount > 0 && queueIndex == currentSongIndex + queuedCount + 1
+                                    Column(Modifier.fillMaxWidth()) {
+                                    if (firstQueued || firstFromList) Column(Modifier.fillMaxWidth().padding(top = if (firstFromList) 6.dp else 0.dp)) {
+                                        if (firstFromList) androidx.compose.material3.HorizontalDivider(
+                                            Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant,
+                                        )
+                                        Text(
+                                            if (firstQueued) stringResource(R.string.queue_section_queued)
+                                            else stringResource(R.string.queue_section_next_from, currentQueueSourceName.ifBlank { stringResource(R.string.queue_source_fallback_label) }),
+                                            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        )
+                                    }
                                     QueuePlaylistSongItem(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -913,6 +931,7 @@ fun QueueBottomSheet(
                                             }
                                         }
                                     )
+                                    }
                                 }
                             }
                         }

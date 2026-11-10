@@ -3,6 +3,9 @@ package fr.spotifeur.presentation.screens
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SwipeLeft
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import fr.spotifeur.presentation.components.TrackSwipeAction
 
@@ -269,6 +272,7 @@ private fun AppearanceSettings(model: SpotifeurModel, navController: NavHostCont
             )
             SwitchSettingItem(stringResource(R.string.settings_show_player_file_info_title), stringResource(R.string.settings_show_player_file_info_subtitle), s.showPlayerFileInfo, { v -> update { it.copy(showPlayerFileInfo = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_attach_file_24), null, tint = MaterialTheme.colorScheme.secondary) })
             SwitchSettingItem(stringResource(R.string.settings_quality_lists_title), stringResource(R.string.settings_quality_lists_subtitle), s.showQualityInLists, { v -> update { it.copy(showQualityInLists = v) } }, leadingIcon = { Icon(painterResource(R.drawable.outline_high_quality_24), null, tint = MaterialTheme.colorScheme.secondary) })
+            SwitchSettingItem(stringResource(R.string.settings_player_menu_title), stringResource(R.string.settings_player_menu_subtitle), s.showPlayerMenuButton, { v -> update { it.copy(showPlayerMenuButton = v) } }, leadingIcon = { Icon(Icons.Rounded.MoreVert, null, tint = MaterialTheme.colorScheme.secondary) })
         }
         SettingsSection(title = stringResource(R.string.settings_home_collage_section), icon = {}) {
             ThemeSelectorItem(
@@ -346,6 +350,7 @@ private fun PlaybackSettings(model: SpotifeurModel, navController: NavHostContro
             onSelectionChanged = { key -> update { it.copy(downloadQuality = key) } },
             leadingIcon = { Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.secondary) },
         )
+        SwitchSettingItem(stringResource(R.string.settings_normalization_title), stringResource(R.string.settings_normalization_subtitle), s.audioNormalization, { v -> update { it.copy(audioNormalization = v) } }, leadingIcon = { Icon(Icons.Rounded.GraphicEq, null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_keep_playing_title), stringResource(R.string.settings_keep_playing_subtitle), s.keepPlayingInBackground, { v -> update { it.copy(keepPlayingInBackground = v) } }, leadingIcon = { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_pause_on_volume_zero), stringResource(R.string.settings_pause_on_volume_zero_desc), s.pauseOnVolumeZero, { v -> update { it.copy(pauseOnVolumeZero = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_volume_down_24), null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_headphones_resume_title), stringResource(R.string.settings_headphones_resume_subtitle), s.resumeOnHeadphones, { v -> update { it.copy(resumeOnHeadphones = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_headphones_24), null, tint = MaterialTheme.colorScheme.secondary) })
@@ -382,6 +387,18 @@ private fun BehaviorSettings(model: SpotifeurModel, navController: NavHostContro
                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = MaterialTheme.colorScheme.secondary) },
             )
         }
+        SwitchSettingItem(stringResource(R.string.settings_search_sources_title), stringResource(R.string.settings_search_sources_subtitle), s.showSearchSources, { v -> update { it.copy(showSearchSources = v) } }, leadingIcon = { Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.secondary) })
+        ThemeSelectorItem(
+            label = stringResource(R.string.settings_mini_swipe_title), description = stringResource(R.string.settings_mini_swipe_subtitle),
+            options = mapOf(
+                AppSettings.MINI_SWIPE_TRACKS to stringResource(R.string.settings_mini_swipe_tracks),
+                AppSettings.MINI_SWIPE_DISMISS to stringResource(R.string.settings_mini_swipe_dismiss),
+                AppSettings.MINI_SWIPE_OFF to stringResource(R.string.settings_mini_swipe_off),
+            ),
+            selectedKey = s.miniPlayerSwipe,
+            onSelectionChanged = { key -> update { it.copy(miniPlayerSwipe = key) } },
+            leadingIcon = { Icon(Icons.Rounded.SwipeLeft, null, tint = MaterialTheme.colorScheme.secondary) },
+        )
     }
 }
 

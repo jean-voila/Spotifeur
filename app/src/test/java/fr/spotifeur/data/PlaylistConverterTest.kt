@@ -59,12 +59,26 @@ class PlaylistConverterTest {
         val conversion = PlaylistConversion(this, Music("${LOCAL_PLAYLIST_PREFIX}src", "Source", "", MusicKind.Playlist), target,
             loadTracks = { tracks },
             search = { track -> synchronized(searched) { searched += track.id }; results[track.id] ?: throw IOException("offline") },
-            fallback = fallback)
+            fallback = fallback, searchAttempts = 1)
         conversion.start()
         withTimeout(5_000) { conversion.state.first { it.finished } }
         block(conversion)
         // A track that appears twice is looked up once.
         assertEquals(searched.distinct().size, searched.size)
+    }
+
+    @Test fun aFailedSearchIsTriedAgain() = runBlocking {
+        val track = spotify("1", "One More Time", "Daft Punk", 320)
+        var calls = 0
+        val conversion = PlaylistConversion(this, Music("${LOCAL_PLAYLIST_PREFIX}src", "Source", "", MusicKind.Playlist), PlaylistKind.YouTubeMusic,
+            loadTracks = { listOf(track) },
+            search = { if (++calls < 3) throw IOException("YouTube Music answered 429.") else listOf(ytm("orig", "One More Time", "Daft Punk", 321)) },
+            retryBaseMs = 1)
+        conversion.start()
+        withTimeout(5_000) { conversion.state.first { it.finished } }
+        assertEquals(3, calls)
+        assertEquals(MatchState.Found, conversion.state.value.rows.single().state)
+        assertFalse(conversion.state.value.rows.single().failed)
     }
 
     @Test fun matchesAreRankedAndClassified() {

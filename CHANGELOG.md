@@ -4,6 +4,38 @@
 
 Nothing yet.
 
+## v1.4.0
+
+### Added
+
+- Search reads every source: Spotify (with an account), YouTube Music and the device's files, for tracks, albums, artists and playlists, in one list ordered by relevance (how closely the name matches, then each service's own rank). YouTube Music contributes its unfiltered search (top result, songs, videos, albums, artists, playlists; episodes, podcasts and profiles are left out) plus its songs shelf for paging. A track, album or artist found on both Spotify and YouTube Music is shown once. The kind filters work for every source. Settings → Behavior → Choose the search source shows All, Spotify, YouTube and Device above the results (hidden by default).
+- Results appear as each source answers instead of after the slowest one, and what is on screen stays while the next text is searched. The previous YouTube Music search also ran a videos search after the songs one; measured on the phone, that second request took 4 to 6 s or failed, and the whole search waited 6 to 9 s for it. It is gone (the unfiltered search already lists videos): every source now answers in 0.3 to 0.55 s after a 250 ms pause in typing.
+- In the queue, the tracks you queued are under "Next in queue", separated from the rest of the list being played ("Next from: …").
+- A long press on any track row opens its ⋮ menu (artist page rows did nothing).
+
+- Volume normalization (Settings → Playback, off by default). Spotify tracks use the `loudness_db` and `true_peak_db` of their AUDIO_FILES extension (field 2, floats, now kept in the audio index), YouTube Music tracks the `loudnessDb` of their player response. The target is −14 LUFS with 1 dB of headroom under the true peak. The gain is applied as the output volume of the track being heard (a `ForwardingAudioSink` that multiplies the player volume), so it only lowers loud tracks; local files are unchanged. Tracks indexed before this version read their loudness once more.
+- A ⋮ button at the top right of the full player opens the options of the current track (like, queue, album, artist, radio, share). Settings → Appearance → Now playing can hide it.
+- Swiping the mini player changes track: left plays the next one, right the previous one, the card leaving and coming back from the other side. Settings → Behavior → Swipe on the mini player can bring back closing the player (the previous behavior) or turn the swipe off. Requested in issue #7.
+- Artist pages show what the official ones show: monthly listeners (`ON_PLATFORM_REPUTATION_TRAIT`, extension 185, field 1) and the play counts of popular tracks (the same extension on each track, field 3), popular releases (152), albums, singles and EPs, compilations and "appears on" as separate sections with "Show all", related artists (from metadata, or extension 165), and an About card with the header picture, world rank and biography (`creatorabout/v0`). The release groups of artist metadata only carry album IDs; they are now hydrated (60 per group, 20 for "appears on"), so artist pages list albums again. The library sync stores artist pages without these requests; the page completes itself when opened.
+- Search history lists the albums, artists, playlists and tracks opened or played from search, with their picture and kind, instead of typed text. Typed queries kept by earlier versions are dropped; backups keep the new entries.
+- Search includes the device's audio files, matched on title, artist and album.
+- Search inside a playlist (Liked songs included): pull down at the top of the list to reveal the field. It matches title, artists and album, ignores case and accents, and reads the rest of the playlist while filtering. Plays and removals apply to the rows shown.
+- YouTube Music album and artist pages (InnerTube `browse` on `MPREb_…` and `UC…`), opened from a track menu or the player. The IDs come from search rows, then the `next` endpoint, then a search for the track.
+
+### Fixed
+
+- Album and artist entries of a track menu did nothing without a Spotify account (issue #8): they were only enabled for Spotify tracks with an account. YouTube Music tracks, and Spotify tracks played through their YouTube Music match, now open YouTube Music's pages.
+- Google sign-in for YouTube Music (issue #4): the check of a new session (`account/account_menu`) could get HTTP 403 right after Google's page, and the account was then not saved. It is now tried again after 2.5 s, then without the brand-account delegation and without the page's visitor identity; a stored delegation refused later is dropped. The status and reason Google gives with a 4xx go to the diagnostic report. On the phone, the same cookies that got 403 during the sign-in opened the account a few minutes later. Before that, the sign-in also only saved the account when the WebView landed on music.youtube.com. When Google ended on www.youtube.com or m.youtube.com, the YouTube page stayed open and nothing was saved. The sign-in now continues to music.youtube.com once the session cookies exist, and leaving the page with the back button after signing in keeps the account. `accounts.youtube.com` and the consent page are never interrupted.
+- Converting a long playlist to YouTube Music stopped with "YouTube Music refused the change (STATUS_FAILED)" after the first hundred tracks, leaving a partial playlist on the account. `browse/edit_playlist` refuses a whole batch when one video is already in the playlist unless each action carries `dedupeOption: DEDUPE_OPTION_SKIP`. Batches now carry it; a batch refused anyway is split until the refused videos are isolated, the others are added, and the count is shown. Tracks are added after creating an empty playlist, which is deleted again if filling it fails. Reproduced on a 1,655-track playlist.
+- Converter searches that fail (network, rate limits) are tried three times with growing waits before the row asks for a choice. Failures are recorded in the diagnostic report.
+- A Spotify playlist answered with HTTP 400 by Playlist4 over HTTP is read through the native core (`PlaylistDataService/Get`), as the official app reads it, then through the public embed page for its first page. Reported on a Free account; not reproduced on the accounts available here.
+- A playlist or Liked songs page whose track count is known but whose tracks did not load says so and offers a retry, instead of "This playlist is empty".
+- Extended Metadata batches that come back mostly without data are recorded in the diagnostic report (provider and entity statuses only) and asked again with the account's `catalogue` in the request header.
+
+### Changed
+
+- Spotify password sign-in uses Login5 v4 (`NativePassword`, field 101, with a flow ID), as the 9.2 app does, and falls back to v3 only if v4 is refused as a protocol. A challenge Spotifeur cannot show (interaction, reCAPTCHA) is reported with a suggestion to use the email code. Requested in issue #1.
+
 ## v1.3.0
 
 ### Added

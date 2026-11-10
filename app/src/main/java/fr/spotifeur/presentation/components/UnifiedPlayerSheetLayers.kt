@@ -66,6 +66,7 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
     currentHorizontalPaddingStartPxProvider: () -> Float,
     currentHorizontalPaddingEndPxProvider: () -> Float,
     onShowQueueClicked: () -> Unit,
+    onShowSongOptions: (fr.spotifeur.data.model.Song) -> Unit,
     onQueueDragStart: () -> Unit,
     onQueueDrag: (Float) -> Unit,
     onQueueRelease: (Float, Float) -> Unit
@@ -244,6 +245,7 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                         onPrevious = onPrevious,
                         onCollapse = onCollapse,
                         onShowQueueClicked = onShowQueueClicked,
+                        onShowSongOptions = onShowSongOptions,
                         onQueueDragStart = onQueueDragStart,
                         onQueueDrag = onQueueDrag,
                         onQueueRelease = onQueueRelease,
@@ -273,6 +275,7 @@ internal fun UnifiedPlayerPrewarmLayer(
     isCastConnecting: Boolean,
     isFavorite: Boolean,
     onShowQueueClicked: () -> Unit,
+    onShowSongOptions: (fr.spotifeur.data.model.Song) -> Unit,
     onQueueDragStart: () -> Unit,
     onQueueDrag: (Float) -> Unit,
     onQueueRelease: (Float, Float) -> Unit
@@ -333,6 +336,7 @@ internal fun UnifiedPlayerPrewarmLayer(
                     isCastConnecting = isCastConnecting,
                     isFavoriteProvider = isFavoriteProvider,
                     onShowQueueClicked = onShowQueueClicked,
+                        onShowSongOptions = onShowSongOptions,
                     onQueueDragStart = onQueueDragStart,
                     onQueueDrag = onQueueDrag,
                     onQueueRelease = onQueueRelease,

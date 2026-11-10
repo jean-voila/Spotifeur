@@ -1,5 +1,8 @@
 package fr.spotifeur.playback
 
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
@@ -32,6 +35,7 @@ class SpotifeurPlaybackService : MediaSessionService() {
     private var behavior: PlaybackBehavior? = null
     private var preloader: QueuePreloader? = null
     private var recovery: PlaybackRecovery? = null
+    private var normalizingSink: NormalizingAudioSink? = null
     private val effectsScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate + kotlinx.coroutines.SupervisorJob())
     override fun onCreate() {
         super.onCreate()
@@ -62,9 +66,10 @@ class SpotifeurPlaybackService : MediaSessionService() {
                 }
             }
             override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-                DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput)
+                NormalizingAudioSink(DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .apply { if (BuildConfig.BUILD_TYPE == "debug") setAudioProcessors(arrayOf(SignalProbe())) }.build()
+                    .apply { if (BuildConfig.BUILD_TYPE == "debug") setAudioProcessors(arrayOf(SignalProbe())) }.build())
+                    .also { normalizingSink = it }
         }
         // Playlists have no length and stay out of both caches: the data source keeps those itself.
         val cacheFlags = CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or CacheDataSource.FLAG_IGNORE_CACHE_FOR_UNSET_LENGTH_REQUESTS
@@ -94,7 +99,14 @@ class SpotifeurPlaybackService : MediaSessionService() {
         EqualizerRuntime.setAudioSessionId(player.audioSessionId)
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) = EqualizerRuntime.setAudioSessionId(audioSessionId)
+            // The first track's loudness is only known once its manifest is read, hence READY too.
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) = updateNormalization(player)
+            override fun onPlaybackStateChanged(playbackState: Int) = updateNormalization(player)
         })
+        effectsScope.launch {
+            SettingsStore.get(this@SpotifeurPlaybackService).settings.map { it.audioNormalization }.distinctUntilChanged()
+                .collect { updateNormalization(player) }
+        }
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         mediaSession = MediaSession.Builder(this, player).setSessionActivity(intent)
@@ -103,6 +115,15 @@ class SpotifeurPlaybackService : MediaSessionService() {
                     if (controller.packageName == packageName || controller.isTrusted) super.onConnect(session, controller)
                     else MediaSession.ConnectionResult.reject()
             }).build()
+    }
+    private fun updateNormalization(player: androidx.media3.common.Player) {
+        val sink = normalizingSink ?: return
+        val enabled = SettingsStore.get(this).settings.value.audioNormalization
+        val id = player.currentMediaItem?.mediaId
+        val gain = if (!enabled || id == null) null else TrackLoudness.gainDb(this, id)
+        val factor = if (gain == null) 1f else TrackLoudness.linear(gain)
+        if (factor != sink.factor) android.util.Log.i("SpotifeurAudio", "normalization enabled=$enabled gain=${gain?.let { "%.1f".format(it) }}dB volume=${"%.2f".format(factor)}")
+        sink.factor = factor
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
     override fun onTaskRemoved(rootIntent: Intent?) {

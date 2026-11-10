@@ -36,6 +36,8 @@ Each `ExtensionQuery` has 1 `extension_kind` (enum) and 2 `etag`.
 
 Skip arrays or entities whose status is neither 0 nor 200.
 
+The request header (`BatchedEntityRequestHeader`, descriptor at `0x66df3c`: 1 `country`, 2 `catalogue`, 3 `task_id`) is optional. Spotifeur sends none, and only when most of a batch comes back without data asks again with the account's `catalogue` attribute; the statuses of such a response go to the diagnostic report. Whether the header changes anything for an account was not established.
+
 ### Extension kinds used
 
 | Kind | Extension | Payload |
@@ -44,6 +46,29 @@ Skip arrays or entities whose status is neither 0 nor 200.
 | 8 | Artist | `metadata.Artist` |
 | 9 | Album | `metadata.Album` |
 | 10 | Track | `metadata.Track` |
+
+### Artist page extensions
+
+The official artist page reads more than `metadata.Artist`. The `ExtensionKind` enum (`extension_kind.proto`, values listed from the descriptor at `0x66eb0f`) names them; these were requested on an artist or track URI like any other kind:
+
+| Kind | Name | Payload (`type_url`) | Content |
+| --- | --- | --- | --- |
+| 152 | `POPULAR_RELEASES` | `spotify.creators.v1.PopularReleases` | 1 `release[]`, each 1 = album URI |
+| 165 | `RELATED_CREATORS_SECTION` | `spotify.creators.v1.RelatedCreators` | 1 → 1 `artist[]`, each 1 = artist URI |
+| 169 | `TOP_PLAYABLES_SECTION` | `spotify.creators.v1.TopPlayables` | 1 → 1 `track[]`, each 1 = track URI |
+| 185 | `ON_PLATFORM_REPUTATION_TRAIT` | `spotify.contentagnostic.v2.OnPlatformReputationTrait` | artist: 1 = monthly listeners, 7 → 1 → 1 badge text ("Top Artists"), 9 → 1 not established; track: 3 = play count (varints) |
+| 200 | `CREATOR_PLAYLISTS_SECTION` | `spotify.creators.v1.CreatorPlaylists` | 1 → 1 `playlist[]` |
+| 203 | `CREATOR_APPEARS_ON_SECTION` | `spotify.creators.v1.CreatorAppearsOn` | 1 → 1 `album[]` |
+| 206 | `ARTIST_HEADLINE` | `spotify.artistsectionprovider.v1.ArtistHeadline` | upcoming release card |
+
+**Live, 2026-11-10:** kind 185 on an artist returned its monthly listeners in field 1 (24,738,114), and on four tracks their play counts in field 3 (for example 1,361,093,322). One request for a single track came back with an empty payload, so a missing value is normal. Kind 60 (`STREAM_COUNT`) answered 404 for tracks, albums and artists. On an album URI, kind 185 answered 404.
+
+```text
+GET spclient/creatorabout/v0/artist/{artistId}/about?fields=artist,listenerCount,monthlyListenerRank,isVerified
+Accept: application/json
+```
+
+Static: the two query strings are in `classes5.dex`. **Live:** the JSON has `name`, `isVerified`, `mainImageUrl`, `headerImage.uri`, `biography` and `autobiography.links`. `pathfinder/v2/query` on `api-partner.spotify.com` answered 403 to the Login5 token, whatever the persisted query hash.
 
 ### `metadata.proto`
 

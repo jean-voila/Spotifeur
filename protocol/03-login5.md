@@ -64,11 +64,11 @@ Static: `p.fg8.b` (`classes.dex`) turns `p.ig8` into `EsAuthenticateCredentials.
 
 **Live:** this flow returned `LoginOk`, and the stored credential restored the session after the app was force-stopped. It needs no password and changes nothing on the account. Android autofill should be cancelled for the code field so the code is not offered as a password.
 
-### Password (v3, field 101)
+### Password (v4 and v3, field 101)
 
-Static: `p.fg8.b` builds `EsAuthenticateCredentials.LegacyV3Password` from `p.lg8` (constructor at `0x32cbb6`) and, in a separate branch, a `NativePassword` message (`0x32cc06`). Both exist in this build.
+Static: `p.fg8.b` builds `EsAuthenticateCredentials.LegacyV3Password` from `p.lg8` (constructor at `0x32cbb6`) and, in a separate branch, a `NativePassword` message (`0x32cc06`). Both exist in this build. Orbit names `spotify.login5.v4.credentials.NativePassword` with 1 `id` and 2 `password`.
 
-**Live:** with a test identifier, the server answered with a Hashcash challenge, then error 1 (`INVALID_CREDENTIALS`) after the solution. The exchange works up to credential verification. Whether a password login succeeds for a given account was not established.
+**Live, 2026-11-10, synthetic identifier:** v4 with `flow_id` and field 101 answered error 1 (`INVALID_CREDENTIALS`) at once, without a challenge; v4 with an unused field (113) answered HTTP 400, so field 101 is a credential v4 knows. v3 field 101 answered with a Hashcash challenge, then error 1 after the solution. Spotifeur sends v4 first and falls back to v3 only when v4 is refused as a protocol (HTTP 400 or error 3). Whether a password login succeeds for a real account was not established here. The v4 descriptors also hold `InteractionChallenge`, `Redirect.interaction_url` and `Recaptcha.site_key`: a challenge of those kinds is reported to the user, who can use the email code instead.
 
 ### Stored credential (v3, field 100)
 

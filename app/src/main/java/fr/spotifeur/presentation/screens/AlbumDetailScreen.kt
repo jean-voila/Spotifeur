@@ -1,5 +1,6 @@
 package fr.spotifeur.presentation.screens
 
+import fr.spotifeur.data.source
 import androidx.compose.material.icons.rounded.Share
 import fr.spotifeur.presentation.utils.shareMusic
 import fr.spotifeur.presentation.utils.spotifyShareUrl
@@ -110,9 +111,11 @@ fun AlbumDetailScreen(
     }
     CollectionDetailLayout(current, detail?.content?.total ?: songs.size, ui, navController, rememberLazyListState()) {
         item(key = "album_actions") {
-            DetailActionsRow(current, true, current.id in saved, pins.any { it.id == current.id },
+            // YouTube Music albums cannot be saved to Spotify or seed a Spotify radio.
+            val spotifyAlbum = current.source == fr.spotifeur.data.MusicSource.Spotify
+            DetailActionsRow(current, spotifyAlbum, current.id in saved, pins.any { it.id == current.id },
                 { model.toggleFavorite(current) }, { ui.togglePin(current) },
-                { ui.startRadio(current) { navController.openMusic(ui, it) } }, ui)
+                { ui.startRadio(current) { navController.openMusic(ui, it) } }, ui, showRadio = spotifyAlbum)
             fr.spotifeur.presentation.components.CollectionDownloadProgress(ui, current)
         }
         if (detail?.error != null) item { Text(detail.error, color = MaterialTheme.colorScheme.error) }

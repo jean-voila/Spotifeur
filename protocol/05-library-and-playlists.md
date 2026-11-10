@@ -88,6 +88,12 @@ Static: the block at `0x13917e8` builds `playlist/v2/` with `GET` and `/changes`
 
 **Live:** paging a 1,600+ track playlist 100 items at a time, order and duplicates preserved.
 
+**Reported, not reproduced:** a Free account (`on-demand=false`, `ads=true`) got HTTP 400 on the first page of a Spotify-owned playlist whose rootlist entry had length 0. On the Premium account used here, the Spotify-owned lists of the rootlist all answered 200, the AI DJ list (format attributes `lexicon_set_type=your_dj`, `lexicon_context_url=hm://lexicon-session-provider/…`) with length 0 and no items. Another account's personalized list answered 403 or 404 to the Free test account.
+
+### Reading through the native core
+
+`PlaylistDataService/Get` (see [06-playlist-writes.md](06-playlist-writes.md)) also reads contents, as the official app does. Request `{1: playlist_uri, 2: {4: {1: start, 2: length}, 8: true}, 3: {1: metadata policy, 4: {1: true, 9: true}}}`. Response `2 → 1` items (7 row ID, 18 URI), `2 → 2 → 1` playlist metadata: 1 URI, 2 name, 6 length, 7 description, 8 → 1 picture (`spotify:image:…`). **Live:** a 354-track playlist returned its first rows and length 354; the AI DJ list returned no items. Spotifeur uses it when Playlist4 over HTTP answers 400 (or another 4xx other than 401, 403 and 404), then the public embed page for the first page.
+
 ### Writes over HTTP
 
 The Java layer also has `POST playlist/v2/playlist/{id}/changes` (`p.efe.a`, `classes10.dex`, body `ListChanges`: 1 `base_revision`, 2 `deltas`, 6 `nonces`) and `PUT playlist/v2/playlist/{id}/items` (`p.hrh1.a`, `classes3.dex`, body `ListUpdateRequest`: 1 `base_revision`, 2 `attributes`, 3 `items`, 4 `info`). Spotifeur writes through the native services instead; see [06-playlist-writes.md](06-playlist-writes.md).

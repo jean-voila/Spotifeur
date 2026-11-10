@@ -51,6 +51,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,20 +62,24 @@ import java.io.IOException
 import java.util.Locale
 import java.util.UUID
 
-/** The catalogue a search reads. Without a Spotify account, only YouTube Music. */
-enum class SearchSource { Spotify, YouTubeMusic }
+/** What a search reads. [All], the default, mixes Spotify (with an account), YouTube Music and device files. */
+enum class SearchSource { All, Spotify, YouTubeMusic, Local }
 
 data class Discovery(
     val query: String = "",
     val loading: Boolean = false,
     val results: List<Music> = emptyList(),
+    /** Spotify's next page token. */
     val nextPage: String? = null,
+    /** YouTube Music's continuation token. */
+    val youTubeNext: String? = null,
     val error: String? = null,
     val spotifyEnabled: Boolean = false,
-    val source: SearchSource = SearchSource.Spotify,
+    val source: SearchSource = SearchSource.All,
 ) {
-    /** The source actually searched: YouTube Music whenever Spotify is not signed in. */
-    val activeSource: SearchSource get() = if (spotifyEnabled) source else SearchSource.YouTubeMusic
+    /** The source actually searched: Spotify needs an account. */
+    val activeSource: SearchSource get() = if (!spotifyEnabled && source == SearchSource.Spotify) SearchSource.All else source
+    val hasMore: Boolean get() = nextPage != null || youTubeNext != null
 }
 
 data class AccountUi(
@@ -329,6 +334,37 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** YouTube Music album and artist pages: kept on the device like Spotify's, read again when older than a day. */
+    private fun loadYouTubePage(item: Music, refresh: Boolean) {
+        val shown = mutableDetails.value[item.id]
+        if (!refresh && shown?.content != null && shown.error == null) return
+        if (shown?.loading == true && !refresh) return
+        detailJobs[item.id]?.cancel()
+        detailJobs[item.id] = viewModelScope.launch {
+            val known = shown?.content ?: withContext(Dispatchers.IO) { store.loadDetail(item.id) }
+            val age = withContext(Dispatchers.IO) { store.detailAgeMs(item.id) }
+            if (known != null && (!online.value || (!refresh && age < YOUTUBE_PAGE_TTL_MS))) {
+                mutableDetails.update { it + (item.id to DetailUi(known)) }
+                return@launch
+            }
+            mutableDetails.update { it + (item.id to DetailUi(known, loading = true)) }
+            try {
+                val page = withContext(Dispatchers.IO) {
+                    if (item.id.startsWith(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX))
+                        fr.spotifeur.data.youtube.YouTubePages.album(item.id.removePrefix(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX))
+                    else fr.spotifeur.data.youtube.YouTubePages.artist(item.id.removePrefix(fr.spotifeur.data.youtube.YTM_ARTIST_PREFIX))
+                }
+                (page.related + page.item).forEach(ui::register)
+                mutableDetails.update { it + (item.id to DetailUi(page)) }
+                withContext(Dispatchers.IO) { store.saveDetail(item.id, page) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube-page", "${item.kind.name.lowercase()} ${failure.javaClass.simpleName} \"${failure.message}\"")
+                mutableDetails.update { it + (item.id to if (known != null) DetailUi(known) else DetailUi(error = readable(failure))) }
+            }
+        }
+    }
+
     private suspend fun youTubeTracks(item: Music): List<Music> {
         mutableDetails.value[item.id]?.content?.takeIf { it.nextPage == null }?.let { return it.tracks }
         if (online.value) try { return fetchYouTubePlaylist(item).tracks }
@@ -340,12 +376,15 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Creates a playlist on the Google account. Only YouTube Music tracks go in. */
     internal suspend fun createYouTubePlaylist(name: String, tracks: List<Music>, public: Boolean): Music {
-        val kept = tracks.filter { it.youTubeVideoId != null }
-        val id = try {
+        val wanted = tracks.filter { it.youTubeVideoId != null }
+        val result = try {
             withContext(Dispatchers.IO) {
-                YouTubeLibrary.create(name, kept.mapNotNull { it.youTubeVideoId }, if (public) YouTubeLibrary.PUBLIC else YouTubeLibrary.PRIVATE)
+                YouTubeLibrary.create(name, wanted.mapNotNull { it.youTubeVideoId }, if (public) YouTubeLibrary.PUBLIC else YouTubeLibrary.PRIVATE)
             }
         } catch (auth: YouTubeAuthRequired) { youTubeAccountLost(auth); throw auth }
+        val id = result.id
+        val kept = wanted.filterNot { it.youTubeVideoId in result.refused }
+        reportRefused(result.refused.size)
         val created = Music(YTM_PLAYLIST_PREFIX + id, name.trim(), fr.spotifeur.utils.formatSongCount(kept.size), MusicKind.Playlist,
             imageUrl = playlistMosaic(kept) ?: kept.firstNotNullOfOrNull(Music::imageUrl), tracks = kept.map(Music::id),
             ownerUsername = youTubeAccount.value?.name)
@@ -358,15 +397,20 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     internal suspend fun addYouTubePlaylistTracks(playlist: Music, tracks: List<Music>) {
         val kept = tracks.filter { it.youTubeVideoId != null }
         if (kept.isEmpty()) throw IllegalArgumentException(app.getString(fr.spotifeur.R.string.youtube_playlist_only_youtube))
-        try { withContext(Dispatchers.IO) { YouTubeLibrary.add(playlist.id, kept.mapNotNull { it.youTubeVideoId }) } }
+        val refused = try { withContext(Dispatchers.IO) { YouTubeLibrary.add(playlist.id, kept.mapNotNull { it.youTubeVideoId }) } }
         catch (auth: YouTubeAuthRequired) { youTubeAccountLost(auth); throw auth }
+        reportRefused(refused.size)
         detailJobs.remove(playlist.id)?.cancel()
         // New rows have ids only the page knows: the next removal reads it again.
         youTubeRows.remove(playlist.id)
         val content = mutableDetails.value[playlist.id]?.content ?: CatalogDetail(playlist, emptyList())
-        val tracksNow = content.tracks + kept
+        val tracksNow = content.tracks + kept.filterNot { it.youTubeVideoId in refused }
         installYouTubeDetail(content.copy(item = content.item.copy(subtitle = fr.spotifeur.utils.formatSongCount(tracksNow.size),
             imageUrl = content.item.imageUrl ?: playlistMosaic(tracksNow)), tracks = tracksNow, total = tracksNow.size))
+    }
+
+    private fun reportRefused(count: Int) {
+        if (count > 0) mutableMessage.value = app.resources.getQuantityString(fr.spotifeur.R.plurals.youtube_tracks_refused, count, count)
     }
 
     /** Removes the row at [index] of the playlist as shown; other copies of the same track stay. */
@@ -688,6 +732,9 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     fun loadDetail(item: Music, refresh: Boolean = false, more: Boolean = false) {
         if (item.isLocalPlaylist) { installLocalPlaylist(item.id); return }
         if (item.id.startsWith(YTM_PLAYLIST_PREFIX)) { loadYouTubePlaylist(item, refresh || more); return }
+        if (item.id.startsWith(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX) || item.id.startsWith(fr.spotifeur.data.youtube.YTM_ARTIST_PREFIX)) {
+            loadYouTubePage(item, refresh); return
+        }
         val source = catalog ?: return
         val shown = mutableDetails.value[item.id]
         if (!more && !refresh && shown?.content != null && shown.error == null) return
@@ -711,7 +758,9 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
             val previous = stored?.let { DetailUi(it) } ?: shown
             if (!more && !refresh && item.id != LIKED_SONGS && previous?.content != null) {
                 val age = withContext(Dispatchers.IO) { store.detailAgeMs(item.id) }
-                if (!online.value || age < revalidateAfterMs(item)) {
+                // An artist page stored by the library sync has no profile yet: read it once opened.
+                val incomplete = item.kind == MusicKind.Artist && previous.content.artist == null
+                if (!online.value || (age < revalidateAfterMs(item) && !incomplete)) {
                     mutableDetails.update { it + (item.id to DetailUi(previous.content)) }
                     return@launch
                 }
@@ -763,13 +812,36 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
     /** Album and artists of a track, read through the catalogue contract used by detail pages. */
-    suspend fun trackRelations(track: Music): List<Music> =
-        if (track.source != fr.spotifeur.data.MusicSource.Spotify || catalog == null) emptyList() else detailForActions(track)?.related.orEmpty()
+    /**
+     * The album and artists of a track. Spotify tracks use Spotify's pages when an account is signed in;
+     * YouTube Music tracks, and Spotify tracks without an account, use YouTube Music's.
+     */
+    suspend fun trackRelations(track: Music): List<Music> {
+        if (track.isLocalTrack) return emptyList()
+        if (track.source == fr.spotifeur.data.MusicSource.Spotify && catalog != null) return detailForActions(track)?.related.orEmpty()
+        if (!online.value) return emptyList()
+        val videoId = track.youTubeVideoId ?: withContext(Dispatchers.IO) {
+            fr.spotifeur.data.youtube.TrackMatcher.resolve(fr.spotifeur.data.youtube.MatchQuery(
+                key = track.id, title = track.title, artists = track.subtitle, durationMs = track.durationMs, album = track.album,
+            ))
+        } ?: return emptyList()
+        val found = withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.relations(videoId, track.title, track.subtitle) }
+            ?: return emptyList()
+        return listOfNotNull(found.album) + found.artists
+    }
     /** Menu actions read the stored page first, so they work the same without network. */
     private suspend fun detailForActions(item: Music): CatalogDetail? {
         mutableDetails.value[item.id]?.content?.let { return it }
         withContext(Dispatchers.IO) { store.loadDetail(item.id) }?.let { return it }
-        val fetched = catalog?.detail(item) ?: return null
+        val fetched = when {
+            item.id.startsWith(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX) -> withContext(Dispatchers.IO) {
+                fr.spotifeur.data.youtube.YouTubePages.album(item.id.removePrefix(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX))
+            }
+            item.id.startsWith(fr.spotifeur.data.youtube.YTM_ARTIST_PREFIX) -> withContext(Dispatchers.IO) {
+                fr.spotifeur.data.youtube.YouTubePages.artist(item.id.removePrefix(fr.spotifeur.data.youtube.YTM_ARTIST_PREFIX))
+            }
+            else -> catalog?.detail(item)
+        } ?: return null
         withContext(Dispatchers.IO) { store.saveDetail(item.id, fetched) }
         return fetched
     }
@@ -904,14 +976,14 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     fun search(query: String, debounce: Boolean = true) {
         searchJob?.cancel()
         val trimmed = query.trim()
-        val source = remote
+        // What is on screen stays until the first source answers for the new text: no blank list while typing.
         mutableDiscovery.update {
-            it.copy(query = query, results = emptyList(), nextPage = null, error = null, loading = trimmed.length >= 2)
+            it.copy(query = query, results = if (trimmed.length < 2) emptyList() else it.results,
+                nextPage = null, youTubeNext = null, error = null, loading = trimmed.length >= 2)
         }
         if (trimmed.length < 2) return
-        if (!online.value) { showLocalResults(trimmed, null); return }
-        if (source == null || discovery.value.activeSource == SearchSource.YouTubeMusic) { loadYouTubePage(trimmed, null, debounce); return }
-        loadPage(source, trimmed, null, debounce)
+        if (!online.value || discovery.value.activeSource == SearchSource.Local) { showLocalResults(trimmed, null); return }
+        loadResults(trimmed, debounce)
     }
 
     fun setSearchSource(source: SearchSource) {
@@ -920,60 +992,95 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         search(discovery.value.query, debounce = false)
     }
 
-    fun searchNext() {
-        val state = discovery.value
-        val token = state.nextPage ?: return
-        if (state.loading) return
-        val source = remote
-        if (source == null || state.activeSource == SearchSource.YouTubeMusic) loadYouTubePage(state.query.trim(), token, debounce = false)
-        else loadPage(source, state.query.trim(), token, debounce = false)
-    }
+    /** Device files whose title, artists or album hold every word of [query]. */
+    private fun matchingDeviceFiles(query: String): List<Music> =
+        mutableLocalTracks.value.filter { fr.spotifeur.utils.matchesWords(query, it.title, it.subtitle, it.album) }.take(MAX_LOCAL_RESULTS)
 
-    private fun loadYouTubePage(query: String, token: String?, debounce: Boolean) {
-        mutableDiscovery.update { it.copy(loading = true, error = null) }
+    /**
+     * First page: every source of the active choice at once. Each one is shown as soon as it answers,
+     * merged with what is already there; a failing one leaves the others.
+     */
+    private fun loadResults(query: String, debounce: Boolean) {
+        val choice = discovery.value.activeSource
         searchJob = viewModelScope.launch {
-            try {
-                if (debounce) delay(400)
-                val page = withContext(Dispatchers.IO) {
-                    if (token == null) fr.spotifeur.data.youtube.YouTubeMusic.search(query)
-                    else fr.spotifeur.data.youtube.YouTubeMusic.searchMore(token)
+            if (debounce) delay(SEARCH_DEBOUNCE_MS)
+            val started = android.os.SystemClock.elapsedRealtime()
+            val spotify = remote.takeIf { choice == SearchSource.All || choice == SearchSource.Spotify }
+            val withYouTube = choice == SearchSource.All || choice == SearchSource.YouTubeMusic
+            val locale = app.resources.configuration.locales.get(0) ?: Locale.getDefault()
+            var spotifyItems: List<Music>? = null
+            var youTubeMixed: List<Music>? = null
+            var youTubeSongs: List<Music>? = null
+            val device = if (choice == SearchSource.All) matchingDeviceFiles(query) else emptyList()
+            val failures = ArrayList<Throwable>()
+            var pending = (if (spotify != null) 1 else 0) + (if (withYouTube) 2 else 0)
+            fun publish() {
+                val youTube = (youTubeMixed.orEmpty() + youTubeSongs.orEmpty()).distinctBy(Music::id)
+                val results = if (choice == SearchSource.Spotify) spotifyItems.orEmpty()
+                    else fr.spotifeur.data.SearchRanking.merge(query, listOfNotNull(
+                        spotifyItems?.let { fr.spotifeur.data.SearchRanking.Source(it, 1.0) },
+                        fr.spotifeur.data.SearchRanking.Source(youTube, if (spotify != null) 0.97 else 1.0),
+                        fr.spotifeur.data.SearchRanking.Source(device, 1.02, deduplicated = false),
+                    ))
+                val finished = pending == 0
+                if (finished && results.isEmpty() && failures.isNotEmpty()) { showLocalResults(query, readableSearchFailure(failures.first())); return }
+                if (!finished && results.isEmpty()) return
+                mutableDiscovery.update { it.copy(loading = !finished, results = results, error = null) }
+            }
+            if (device.isNotEmpty()) publish()
+            // Each source writes on the main thread, so the merges never overlap.
+            fun <T> source(name: String, read: suspend () -> T, keep: (T) -> Unit) = launch {
+                val result = try { Result.success(read()) } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) { Result.failure(failure) }
+                android.util.Log.d("SpotifeurSearch", "$name ${android.os.SystemClock.elapsedRealtime() - started} ms ${result.exceptionOrNull()?.let { "${it.javaClass.simpleName} ${it.message}" } ?: "ok"}")
+                result.onSuccess(keep).onFailure { failures += it }
+                pending--
+                publish()
+            }
+            if (spotify != null) source("spotify", { spotify.search(query, locale, null) }) { page ->
+                spotifyItems = page.items
+                mutableDiscovery.update { it.copy(nextPage = page.nextToken) }
+            }
+            if (withYouTube) {
+                source("youtube-mixed", { withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.searchAll(query) } }) { youTubeMixed = it }
+                source("youtube-songs", { withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubeMusic.searchSongsPage(query) } }) { page ->
+                    youTubeSongs = page.tracks
+                    mutableDiscovery.update { it.copy(youTubeNext = page.next) }
                 }
-                mutableDiscovery.update {
-                    it.copy(loading = false, results = (it.results + page.tracks).distinctBy(Music::id),
-                        nextPage = page.next?.takeUnless { next -> next == token })
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                val message = app.getString(fr.spotifeur.R.string.youtube_search_failed)
-                if (token == null) showLocalResults(query, message) else mutableDiscovery.update { it.copy(loading = false, error = message) }
             }
         }
     }
 
-    private fun loadPage(source: SpotifySearch, query: String, token: String?, debounce: Boolean) {
+    private fun readableSearchFailure(failure: Throwable): String = when (failure) {
+        is fr.spotifeur.data.youtube.YouTubeFailure -> app.getString(fr.spotifeur.R.string.youtube_search_failed)
+        is SpotifyFailure -> failure.message.orEmpty()
+        is InvalidProtocolBufferException -> "Unexpected Spotify response format."
+        else -> "The search was interrupted."
+    }
+
+    /** Next pages are added after what is shown, without moving it. */
+    fun searchNext() {
+        val state = discovery.value
+        if (state.loading || !state.hasMore) return
+        val query = state.query.trim()
+        val spotifyToken = state.nextPage
+        val youTubeToken = state.youTubeNext
         mutableDiscovery.update { it.copy(loading = true, error = null) }
         searchJob = viewModelScope.launch {
-            try {
-                if (debounce) delay(400)
-                val locale = app.resources.configuration.locales.get(0) ?: Locale.getDefault()
-                val page = source.search(query, locale, token)
-                mutableDiscovery.update {
-                    it.copy(
-                        loading = false,
-                        results = (it.results + page.items).distinctBy(Music::id),
-                        nextPage = page.nextToken?.takeUnless { next -> next == token },
-                    )
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: IOException) {
-                val message = when (failure) {
-                    is SpotifyFailure -> failure.message
-                    is InvalidProtocolBufferException -> "Unexpected Spotify response format."
-                    else -> "The Spotify search was interrupted."
-                }
-                if (token == null) showLocalResults(query, message) else mutableDiscovery.update { it.copy(loading = false, error = message) }
+            val locale = app.resources.configuration.locales.get(0) ?: Locale.getDefault()
+            val spotify = async { spotifyToken?.let { token -> remote?.let { source -> runCatching { source.search(query, locale, token) } } } }
+            val youTube = async(Dispatchers.IO) { youTubeToken?.let { token -> runCatching { fr.spotifeur.data.youtube.YouTubeMusic.searchMore(token) } } }
+            val spotifyPage = spotify.await()
+            val youTubePage = youTube.await()
+            val added = fr.spotifeur.data.SearchRanking.merge(query, listOfNotNull(
+                spotifyPage?.getOrNull()?.items?.let { fr.spotifeur.data.SearchRanking.Source(it) },
+                youTubePage?.getOrNull()?.tracks?.let { fr.spotifeur.data.SearchRanking.Source(it, 0.97) },
+            ))
+            val failed = listOfNotNull(spotifyPage?.exceptionOrNull(), youTubePage?.exceptionOrNull()).firstOrNull()
+            mutableDiscovery.update {
+                it.copy(loading = false, results = (it.results + added).distinctBy(Music::id),
+                    nextPage = spotifyPage?.getOrNull()?.nextToken?.takeUnless { next -> next == spotifyToken },
+                    youTubeNext = youTubePage?.getOrNull()?.next?.takeUnless { next -> next == youTubeToken },
+                    error = failed?.takeIf { _ -> added.isEmpty() }?.let(::readableSearchFailure))
             }
         }
     }
@@ -1046,7 +1153,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         SpotifyAccount.attach(session)
         // A guest who signs in keeps the multi-service playlists; the library now comes from Spotify.
         if (mutableLibrary.value.content?.let { it.playlists.isEmpty() && it.savedTrackCount == 0 } == true) mutableLibrary.value = LibraryUi()
-        catalog = SpotifyCatalog(transport, session)
+        catalog = SpotifyCatalog(transport, session) { uri, from, length, fallback -> spotifyPlaylists.page(uri, from, length, fallback) }
         collections = SpotifyLibrary(transport, session, requireNotNull(catalog))
         radio = SpotifyRadio(transport, session)
         remote = SpotifySearch(transport, session)
@@ -1367,6 +1474,8 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val LIKED_SONGS = "spotify:collection:tracks"
+        private const val YOUTUBE_PAGE_TTL_MS = 24L * 60 * 60 * 1000
+        private const val SEARCH_DEBOUNCE_MS = 250L
         const val TRACKS_SPOTIFY = "spotify"
         const val TRACKS_YOUTUBE = "youtube"
         const val TRACKS_FILES = "files"

@@ -164,6 +164,8 @@ class PlaylistConversion(
     /** What a track becomes when nothing matches, if it can still go in (a device file in a Spotify playlist). */
     private val fallback: (Music) -> Music? = { null },
     private val parallelism: Int = 3,
+    private val searchAttempts: Int = 3,
+    private val retryBaseMs: Long = 1_500,
 ) {
     private val mutable = MutableStateFlow(ConversionUi(source, target, source.title))
     val state: StateFlow<ConversionUi> = mutable.asStateFlow()
@@ -191,19 +193,42 @@ class PlaylistConversion(
                 rows.filter { it.state == MatchState.Searching }.forEach { row ->
                     launch {
                         val lookup = lookups.computeIfAbsent(row.original.id) {
-                            async(start = CoroutineStart.LAZY) {
-                                gate.withPermit {
-                                    try { ConversionMatching.rank(row.original, search.candidates(row.original)) }
-                                    catch (cancelled: CancellationException) { throw cancelled }
-                                    catch (_: Exception) { null }
-                                }
-                            }
+                            async(start = CoroutineStart.LAZY) { gate.withPermit { lookup(row.original) } }
                         }
                         settle(row.position, lookup.await())
                     }
                 }
             }
+            if (failures.get() > 0) fr.spotifeur.data.diagnostics.DiagnosticLog.record("convert",
+                "target=${target.key} searches failed=${failures.get()} of ${lookups.size}")
         }
+    }
+
+    private val failures = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * A long playlist makes thousands of searches, and the service answers some with errors or rate
+     * limits. Each search is tried three times, waiting longer each time, before the row asks for a choice.
+     */
+    private suspend fun lookup(track: Music): List<Pair<Music, Double>>? {
+        repeat(searchAttempts) { attempt ->
+            try { return ConversionMatching.rank(track, search.candidates(track)) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (attempt == searchAttempts - 1) {
+                    if (failures.incrementAndGet() <= 3) fr.spotifeur.data.diagnostics.DiagnosticLog.record("convert",
+                        "search failed ${failure.javaClass.simpleName} \"${failure.message?.take(80)}\"")
+                    return null
+                }
+                kotlinx.coroutines.delay(retryDelayMs(failure, attempt))
+            }
+        }
+        return null
+    }
+
+    private fun retryDelayMs(failure: Exception, attempt: Int): Long {
+        val limited = (failure as? java.io.IOException)?.message?.let { "429" in it || "limiting" in it } == true
+        return (if (limited) retryBaseMs * 7 else retryBaseMs) * (attempt + 1)
     }
 
     private fun settle(position: Int, ranked: List<Pair<Music, Double>>?) = change(position) { row ->
@@ -261,5 +286,7 @@ class PlaylistConversion(
         ui.copy(rows = ui.rows.map { if (it.position == position) update(it) else it })
     }
 
-    private companion object { const val MAX_CANDIDATES = 8 }
+    private companion object {
+        const val MAX_CANDIDATES = 8
+    }
 }

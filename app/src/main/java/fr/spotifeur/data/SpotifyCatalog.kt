@@ -19,12 +19,36 @@ data class CatalogDetail(
     val related: List<Music> = emptyList(),
     val nextPage: String? = null,
     val total: Int = tracks.size,
+    /** Artist pages only: what the official artist page shows besides tracks and releases. */
+    val artist: ArtistProfile? = null,
+)
+
+/**
+ * The parts of an artist page that are not plain metadata. Release lists hold album IDs found in
+ * [CatalogDetail.related], in the order Spotify gives them.
+ */
+data class ArtistProfile(
+    val monthlyListeners: Long? = null,
+    val worldRank: Int? = null,
+    /** Play counts of the popular tracks, by track ID. */
+    val playCounts: Map<String, Long> = emptyMap(),
+    val popularReleases: List<String> = emptyList(),
+    val albums: List<String> = emptyList(),
+    val singles: List<String> = emptyList(),
+    val compilations: List<String> = emptyList(),
+    val appearsOn: List<String> = emptyList(),
+    val biography: String = "",
+    val headerImageUrl: String? = null,
+    /** Counts YouTube Music only gives rounded ("28.3M"): shown in the short form. */
+    val approximate: Boolean = false,
 )
 
 /** Native Extended Metadata and Playlist4 contracts carried by the supplied Android APK. */
 internal class SpotifyCatalog(
     private val transport: SpotifyTransport,
     private val session: SpotifySession,
+    /** Reads a playlist page through the native core when Playlist4 over HTTP refuses it. */
+    private val nativePlaylist: (suspend (uri: String, from: Int, length: Int, fallback: Music) -> PlaylistPage)? = null,
 ) {
     private val musicCache = ConcurrentHashMap<String, Music>()
     private val metadataCache = ConcurrentHashMap<String, ByteArray>()
@@ -73,13 +97,45 @@ internal class SpotifyCatalog(
                 val groups = metadata.messages(4)
                 val top = groups.firstOrNull { it.text(1) == java.util.Locale.getDefault().country }
                     ?: groups.firstOrNull()
-                val tracks = hydrate(top?.messages(2).orEmpty().mapNotNull { gidUri("track", it.bytes(1)) })
-                val albums = (5..8).flatMap { field ->
-                    metadata.messages(field).flatMap { it.messages(1) }.mapNotNull(::decodeMetadataAlbum)
-                }.distinctBy(Music::id)
+                // The library sync stores artist pages too: it keeps to metadata, the page completes itself when opened.
+                val background = kotlin.coroutines.coroutineContext[BackgroundRequestsKey] != null
+                val extras = if (background) ArtistExtensions(null, emptyList(), emptyList(), emptyList()) else artistExtensions(artist.id)
+                val topUris = top?.messages(2).orEmpty().mapNotNull { gidUri("track", it.bytes(1)) }
+                    .ifEmpty { extras.topTracks }
+                val tracks = hydrate(topUris)
+                // Album, single, compilation and "appears on" groups, as the official page separates them. The
+                // groups only carry album IDs: their metadata is read, newest first, up to a limit per group.
+                val groupIds = (5..8).associateWith { field ->
+                    metadata.messages(field).flatMap { it.messages(1) }.mapNotNull { gidUri("album", it.bytes(1)) }.distinct()
+                        .take(if (field == 8) MAX_APPEARS_ON else MAX_RELEASES_PER_GROUP)
+                }
+                val described = if (background) emptyMap() else hydrate(groupIds.values.flatten()).associateBy(Music::id)
+                val grouped = (5..8).associateWith { field ->
+                    val inline = metadata.messages(field).flatMap { it.messages(1) }.mapNotNull(::decodeMetadataAlbum).associateBy(Music::id)
+                    groupIds[field].orEmpty().mapNotNull { described[it] ?: inline[it] }
+                        .sortedByDescending { it.note.toIntOrNull() ?: 0 }
+                }
+                val listed = grouped.values.flatten().map(Music::id).toSet()
+                val popular = extras.popularReleases.filter { it in listed } +
+                    hydrate(extras.popularReleases.filterNot { it in listed }).map(Music::id)
+                val albums = (grouped.values.flatten() + extras.popularReleases.mapNotNull(musicCache::get)).distinctBy(Music::id)
                 val relatedArtists = metadata.messages(15).mapNotNull(::decodeMetadataArtist)
+                    .ifEmpty { hydrate(extras.relatedArtists) }
                 remember(tracks + albums + relatedArtists)
-                CatalogDetail(artist, tracks, albums + relatedArtists)
+                val about = if (background) null else artistAbout(artist.id)
+                val profile = if (background) null else ArtistProfile(
+                    monthlyListeners = extras.monthlyListeners ?: about?.listeners,
+                    worldRank = about?.rank,
+                    playCounts = trackPlayCounts(tracks.map(Music::id)),
+                    popularReleases = popular,
+                    albums = grouped[5].orEmpty().map(Music::id),
+                    singles = grouped[6].orEmpty().map(Music::id),
+                    compilations = grouped[7].orEmpty().map(Music::id),
+                    appearsOn = grouped[8].orEmpty().map(Music::id),
+                    biography = cleanBiography(artist.note).ifBlank { about?.biography.orEmpty() },
+                    headerImageUrl = about?.headerImage,
+                )
+                CatalogDetail(artist, tracks, albums + relatedArtists, artist = profile)
             }
             MusicKind.Track -> {
                 val track = decodeMetadataTrack(metadata) ?: item
@@ -94,7 +150,25 @@ internal class SpotifyCatalog(
 
     // Decoding hundreds of entities is CPU work: keep it off the caller's (often main) thread.
     private suspend fun fetchMetadata(uris: List<String>): Unit = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        val missing = requestMetadata(uris, catalogue = null)
+        // A few missing items are unavailable releases. Most of a batch missing means the service refused it:
+        // ask again stating the account's catalogue, as the request header allows.
+        if (missing.isEmpty() || missing.size * 2 < uris.size) return@withContext
+        val attributes = session.lastAttributes ?: try { spotifyAttributes(transport, session) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (auth: SpotifyAuthRequired) { throw auth }
+            catch (_: java.io.IOException) { null }
+        val catalogue = attributes?.get("catalogue")?.takeIf(String::isNotBlank) ?: return@withContext
+        val still = requestMetadata(missing, catalogue)
+        if (still.size < missing.size) {
+            fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata", "recovered=${missing.size - still.size} of ${missing.size} with catalogue=$catalogue")
+        }
+    }
+
+    /** One Extended Metadata batch. Returns the URIs the service did not describe. */
+    private suspend fun requestMetadata(uris: List<String>, catalogue: String?): List<String> {
         val body = proto {
+            if (catalogue != null) writeByteArray(1, proto { writeString(2, catalogue) })
             uris.forEach { uri ->
                 val kind = metadataKind(uri) ?: return@forEach
                 writeByteArray(2, proto {
@@ -107,7 +181,8 @@ internal class SpotifyCatalog(
             transport, session, spotifyUrl("extended-metadata/v0/extended-metadata"),
             "Spotify metadata", body,
         )
-        decodeMetadataExtensions(response).forEach { (uri, bytes) ->
+        val decoded = decodeMetadataExtensions(response)
+        decoded.forEach { (uri, bytes) ->
             metadataCache[uri] = bytes
             val entity = Proto(bytes)
             val music = when (metadataKind(uri)) {
@@ -121,6 +196,20 @@ internal class SpotifyCatalog(
                 musicCache[music.id] = music
             }
         }
+        val missing = uris.filter { metadataKind(it) != null && it !in decoded }
+        if (missing.isNotEmpty()) recordMissingMetadata(response, uris.size, missing.size, catalogue)
+        return missing
+    }
+
+    @Volatile private var lastMissingReport = 0L
+    /** Statuses only, at most once every 30 s: enough to tell a refused catalogue from unavailable items. */
+    private fun recordMissingMetadata(response: ByteArray, requested: Int, missing: Int, catalogue: String?) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastMissingReport < 30_000) return
+        lastMissingReport = now
+        val summary = runCatching { metadataStatusSummary(response) }.getOrDefault("unreadable")
+        fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata",
+            "missing=$missing of $requested header=${catalogue ?: "none"} $summary")
     }
 
     private suspend fun playlist(item: Music, page: String?): CatalogDetail {
@@ -130,11 +219,15 @@ internal class SpotifyCatalog(
         val from = page?.toIntOrNull()?.takeIf { it >= 0 } ?: 0
         val url = spotifyUrl("playlist/v2/playlist/$id").newBuilder()
             .addQueryParameter("from", from.toString())
-            .addQueryParameter("length", "100")
+            .addQueryParameter("length", PLAYLIST_PAGE.toString())
             .addQueryParameter("decorate", "revision,attributes,length,owner,capabilities,status_code")
             .build()
-        val response = authenticatedSpotifyRequest(transport, session, url, "Spotify playlist")
-        val decoded = decodePlaylistPage(response, item)
+        val decoded = try {
+            decodePlaylistPage(authenticatedSpotifyRequest(transport, session, url, "Spotify playlist"), item)
+        } catch (failure: SpotifyFailure) {
+            if (!playlistFallbackApplies(failure)) throw failure
+            fallbackPlaylistPage(uri, from, item, failure)
+        }
         hydrate(decoded.uris)
         // Keep the playlist's order, local file references included.
         val tracks = decoded.entries.mapNotNull { entry -> spotifyLocalTrack(entry) ?: musicCache[entry] }
@@ -149,8 +242,133 @@ internal class SpotifyCatalog(
         )
     }
 
+    /**
+     * Playlist4 over HTTP refused the page (HTTP 400 was reported for some accounts). The native
+     * core reads playlists the way the official app does; the public embed page is the last resort
+     * for the first page.
+     */
+    private suspend fun fallbackPlaylistPage(uri: String, from: Int, item: Music, failure: SpotifyFailure): PlaylistPage {
+        val native = nativePlaylist
+        if (native != null) {
+            try {
+                val page = native(uri, from, PLAYLIST_PAGE, item)
+                fr.spotifeur.data.diagnostics.DiagnosticLog.record("catalog",
+                    "playlist http=${failure.status} fallback=native items=${page.rawCount} total=${page.total}")
+                return page
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                fr.spotifeur.data.diagnostics.DiagnosticLog.record("catalog",
+                    "playlist http=${failure.status} fallback=native failed ${error.javaClass.simpleName} \"${error.message}\"")
+            }
+        }
+        if (from != 0) throw failure
+        val public = try {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { SpotifyPublicPlaylist.read(uri.substringAfterLast(':')) }
+        } catch (error: java.io.IOException) {
+            fr.spotifeur.data.diagnostics.DiagnosticLog.record("catalog",
+                "playlist http=${failure.status} fallback=public failed ${error.javaClass.simpleName}")
+            throw failure
+        }
+        fr.spotifeur.data.diagnostics.DiagnosticLog.record("catalog", "playlist http=${failure.status} fallback=public items=${public.tracks.size}")
+        seed(public.tracks.filter { it.id.startsWith("spotify:track:") })
+        val entries = public.tracks.map(Music::id)
+        return PlaylistPage(
+            item = item.copy(title = public.name.ifBlank { item.title }, imageUrl = public.imageUrl ?: item.imageUrl,
+                subtitle = fr.spotifeur.utils.formatSongCount(entries.size)),
+            uris = entries.filter { it.startsWith("spotify:track:") }, total = entries.size, rawCount = entries.size,
+            hasMore = false, entries = entries,
+        )
+    }
+
+    private class ArtistExtensions(
+        val monthlyListeners: Long?, val popularReleases: List<String>, val topTracks: List<String>, val relatedArtists: List<String>,
+    )
+
+    /**
+     * Extended Metadata extensions of an artist, read by the official artist page:
+     * ON_PLATFORM_REPUTATION_TRAIT (185, field 1 = monthly listeners; field 3 on a track is its play count), POPULAR_RELEASES (152),
+     * TOP_PLAYABLES_SECTION (169) and RELATED_CREATORS_SECTION (165).
+     */
+    private suspend fun artistExtensions(uri: String): ArtistExtensions {
+        val data = try { extensions(listOf(uri), listOf(185, 152, 169, 165)) }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (auth: SpotifyAuthRequired) { throw auth }
+        catch (_: java.io.IOException) { emptyMap() }
+        fun payload(kind: Int) = data[kind to uri]?.let(::Proto)
+        val reputation = payload(185)
+        val popular = payload(152)?.messages(1).orEmpty().mapNotNull { it.text(1)?.let(::canonicalMusicUri) }
+            .filter { it.startsWith("spotify:album:") }
+        val top = payload(169)?.messages(1).orEmpty().flatMap { it.messages(1) }.mapNotNull { it.text(1)?.let(::canonicalMusicUri) }
+            .filter { it.startsWith("spotify:track:") }
+        val related = payload(165)?.messages(1).orEmpty().flatMap { it.messages(1) }.mapNotNull { it.text(1)?.let(::canonicalMusicUri) }
+            .filter { it.startsWith("spotify:artist:") }
+        return ArtistExtensions(reputation?.long(1)?.takeIf { it > 0 }, popular, top, related)
+    }
+
+    /** ON_PLATFORM_REPUTATION_TRAIT on tracks: field 3 is the play count. Absent when the service gives none. */
+    private suspend fun trackPlayCounts(tracks: List<String>): Map<String, Long> {
+        if (tracks.isEmpty()) return emptyMap()
+        val data = try { extensions(tracks, listOf(185)) }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (auth: SpotifyAuthRequired) { throw auth }
+        catch (_: java.io.IOException) { return emptyMap() }
+        return tracks.mapNotNull { uri -> data[185 to uri]?.let(::Proto)?.long(3)?.takeIf { it > 0 }?.let { uri to it } }.toMap()
+    }
+
+    /** Payloads by (extension kind, entity URI), for entities the service answered with 200. */
+    private suspend fun extensions(uris: List<String>, kinds: List<Int>): Map<Pair<Int, String>, ByteArray> {
+        val body = proto {
+            uris.forEach { uri ->
+                writeByteArray(2, proto { writeString(1, uri); kinds.forEach { kind -> writeByteArray(2, proto { writeEnum(1, kind) }) } })
+            }
+        }
+        val response = requests.withPermit {
+            authenticatedSpotifyRequest(transport, session, spotifyUrl("extended-metadata/v0/extended-metadata"), "Spotify artist", body)
+        }
+        return buildMap {
+            Proto(response).messages(2).forEach { array ->
+                val kind = array.number(2) ?: return@forEach
+                array.messages(3).forEach { data ->
+                    val status = data.message(1)?.number(1) ?: 0
+                    if (status != 0 && status != 200) return@forEach
+                    val uri = data.text(2)?.let(::canonicalMusicUri) ?: return@forEach
+                    data.message(3)?.bytes(2)?.let { put(kind to uri, it) }
+                }
+            }
+        }
+    }
+
+    private class ArtistAbout(val listeners: Long?, val rank: Int?, val biography: String, val headerImage: String?)
+
+    /** `creatorabout/v0/artist/{id}/about`, the official "About" section. Optional: the page works without it. */
+    private suspend fun artistAbout(uri: String): ArtistAbout? = try {
+        val url = spotifyUrl("creatorabout/v0/artist/${uri.substringAfterLast(':')}/about").newBuilder()
+            .addQueryParameter("fields", "artist,listenerCount,monthlyListenerRank,isVerified").build()
+        val json = org.json.JSONObject(requests.withPermit {
+            authenticatedSpotifyRequest(transport, session, url, "Spotify artist", contentType = "application/json")
+        }.decodeToString())
+        ArtistAbout(
+            listeners = json.optLong("monthlyListeners", json.optLong("listenerCount", 0)).takeIf { it > 0 },
+            rank = json.optInt("monthlyListenerRank", json.optJSONObject("monthlyListenerRank")?.optInt("rank") ?: 0).takeIf { it > 0 },
+            biography = cleanBiography(json.optString("biography")),
+            headerImage = json.optJSONObject("headerImage")?.optString("uri")?.let(::spotifyArtwork),
+        )
+    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+    catch (auth: SpotifyAuthRequired) { throw auth }
+    catch (_: java.io.IOException) { null }
+    catch (_: org.json.JSONException) { null }
+
     private fun remember(items: List<Music>) = items.forEach { musicCache[it.id] = it }
 }
+
+private const val PLAYLIST_PAGE = 100
+private const val MAX_RELEASES_PER_GROUP = 60
+private const val MAX_APPEARS_ON = 20
+
+/** Statuses for which another way of reading the playlist may succeed: not auth, access, rate limits or a missing list. */
+internal fun playlistFallbackApplies(failure: SpotifyFailure): Boolean =
+    failure !is SpotifyAuthRequired && failure !is SpotifyRateLimited && failure.status != null &&
+        failure.status in 400..499 && failure.status !in setOf(401, 403, 404)
 
 internal fun spotifyUrl(path: String): HttpUrl = "https://spclient.wg.spotify.com/".toHttpUrl()
     .newBuilder().addPathSegments(path).build()
@@ -193,6 +411,20 @@ internal fun decodeMetadataExtensions(response: ByteArray): Map<String, ByteArra
             put(uri, value)
         }
     }
+}
+
+/** Provider and entity statuses of an Extended Metadata response, for the diagnostic report. */
+internal fun metadataStatusSummary(response: ByteArray): String = Proto(response).messages(2).joinToString(" ") { array ->
+    val entities = array.messages(3).groupingBy { it.message(1)?.number(1) ?: 0 }.eachCount()
+    "kind=${array.number(2) ?: "?"} provider=${array.message(1)?.number(1) ?: 0} entities=$entities"
+}.ifEmpty { "arrays=0" }
+
+/** Artist biographies carry HTML links and entities: plain text with paragraphs kept. */
+internal fun cleanBiography(text: String): String {
+    if (text.isBlank()) return ""
+    val noTags = text.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n").replace(Regex("<[^>]+>"), "")
+    val decoded = androidx.core.text.HtmlCompat.fromHtml(noTags.replace("\n", "<br>"), androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY).toString()
+    return decoded.replace(Regex("\n{3,}"), "\n\n").trim()
 }
 
 internal fun metadataKind(uri: String): Int? = when {

@@ -5,6 +5,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+/** The server does not take this Login5 version or request layout; another version may. */
+internal class Login5ProtocolRefused(message: String) : SpotifyFailure(message)
+
 internal class StoredCredential(val username: String, val bytes: ByteArray)
 
 internal class LoginGrant(val access: String, val expiresAt: Long, val credential: StoredCredential?) {
@@ -26,6 +29,10 @@ internal class Login5(
         version = 4, flowId = flowId, requestCode = code,
     )
 
+    /**
+     * Password sign-in. The 9.2 app sends `NativePassword` (1 id, 2 password) as field 101 of a v4
+     * request with a flow ID; v3 (`LegacyV3Password`, same field) is only used if v4 is refused as a protocol.
+     */
     suspend fun password(
         clientToken: String,
         username: String,
@@ -37,7 +44,12 @@ internal class Login5(
             writeString(2, password)
         }
         try {
-            return exchange(clientToken, 101, credential, requestCode = code)
+            return try {
+                exchange(clientToken, 101, credential, version = 4, flowId = java.util.UUID.randomUUID().toString(), requestCode = code)
+            } catch (failure: SpotifyFailure) {
+                if (failure !is Login5ProtocolRefused) throw failure
+                exchange(clientToken, 101, credential, requestCode = code)
+            }
         } finally {
             credential.fill(0)
         }
@@ -80,6 +92,9 @@ internal class Login5(
                 .build()
             val response = try {
                 Proto(transport.send(request, "Spotify sign-in"))
+            } catch (failure: SpotifyFailure) {
+                if (failure.status == 400) throw Login5ProtocolRefused("Spotify rejected Android login protocol v$version.")
+                throw failure
             } finally {
                 body.fill(0)
             }
@@ -94,7 +109,7 @@ internal class Login5(
                         },
                         401,
                     )
-                    3 -> SpotifyFailure("Spotify rejected Android login protocol v$version.")
+                    3 -> Login5ProtocolRefused("Spotify rejected Android login protocol v$version.")
                     6, 8 -> SpotifyFailure("Spotify asks to try again later.", 429)
                     else -> SpotifyFailure("Spotify sign-in rejected (code $error).")
                 }
@@ -121,8 +136,14 @@ internal class Login5(
                         })
                     }
                 } else {
-                    val code = challenge.message(2)
-                        ?: throw SpotifyFailure("Spotify requires an Android challenge that is not implemented yet.")
+                    val code = challenge.message(2) ?: run {
+                        val type = (3..10).firstOrNull { challenge.bytes(it) != null }
+                        fr.spotifeur.data.diagnostics.DiagnosticLog.record("login", "unsupported challenge field=${type ?: "unknown"} v$version")
+                        throw SpotifyFailure(
+                            if (method == 101) "Spotify asks for a check Spotifeur cannot show. Sign in with a code sent by email instead."
+                            else "Spotify requires an Android challenge that is not implemented yet.",
+                        )
+                    }
                     val length = code.number(2)?.takeIf { it in 1..12 } ?: 6
                     val value = requestCode(length)
                     codeSubmitted = true

@@ -58,7 +58,10 @@ import androidx.compose.foundation.lazy.LazyListState
 @Composable
 internal fun CollectionDetailLayout(
     item: Music, count: Int, ui: PlayerViewModel, navController: NavHostController,
-    lazyListState: LazyListState, content: LazyListScope.() -> Unit,
+    lazyListState: LazyListState,
+    /** Items above the visible start of the list, revealed by pulling down once the header is open. */
+    hiddenLeadingItems: Int = 0,
+    content: LazyListScope.() -> Unit,
 ) {
     val isDarkTheme = LocalSpotifeurDarkTheme.current
     val base = MaterialTheme.colorScheme
@@ -106,7 +109,7 @@ internal fun CollectionDetailLayout(
                     val delta = available.y
                     val isScrollingDown = delta < 0
 
-                    if (!isScrollingDown && (lazyListState.firstVisibleItemIndex > 0 || lazyListState.firstVisibleItemScrollOffset > 0)) {
+                    if (!isScrollingDown && !lazyListState.atCollectionTop(hiddenLeadingItems)) {
                         return Offset.Zero
                     }
 
@@ -138,8 +141,7 @@ internal fun CollectionDetailLayout(
             if (!lazyListState.isScrollInProgress) {
                 val shouldExpand =
                     topBarHeight.value > (minTopBarHeightPx + maxTopBarHeightPx) / 2
-                val canExpand =
-                    lazyListState.firstVisibleItemIndex == 0 && lazyListState.firstVisibleItemScrollOffset == 0
+                val canExpand = lazyListState.atCollectionTop(hiddenLeadingItems)
 
                 val targetValue = if (shouldExpand && canExpand) {
                     maxTopBarHeightPx
@@ -215,3 +217,7 @@ internal fun CollectionDetailLayout(
                 }
     }
 }
+
+/** At the start of the list, hidden leading items (shown or not) excepted. */
+private fun LazyListState.atCollectionTop(hidden: Int): Boolean =
+    firstVisibleItemIndex < hidden || (firstVisibleItemIndex == hidden && firstVisibleItemScrollOffset == 0)

@@ -76,25 +76,48 @@ object YouTubeLibrary {
         )
     }
 
-    /** Creates a playlist on the account and returns its id. Tracks beyond the first hundred are added afterwards. */
-    fun create(title: String, videoIds: List<String>, privacy: String = PRIVATE): String {
+    /** A playlist created on the account, and the tracks YouTube Music would not take. */
+    data class Created(val id: String, val refused: List<String>)
+
+    /**
+     * Creates a playlist on the account. The tracks go in afterwards, a hundred at a time, so a long
+     * playlist is never one oversized request.
+     */
+    fun create(title: String, videoIds: List<String>, privacy: String = PRIVATE): Created {
         val clean = title.trim()
         require(clean.isNotEmpty() && clean.length <= 150) { "The name must be between 1 and 150 characters." }
         val body = JSONObject().put("title", clean).put("description", "").put("privacyStatus", privacy)
-        val head = videoIds.take(EDIT_BATCH)
-        if (head.isNotEmpty()) body.put("videoIds", JSONArray(head))
         val response = request("playlist/create", body)
         val id = response.optString("playlistId").takeIf(String::isNotBlank)
             ?: throw YouTubeFailure("YouTube Music did not return the new playlist.")
-        add(id, videoIds.drop(EDIT_BATCH))
-        return id
+        // A playlist left half filled would be created again by the next attempt: it goes if filling fails.
+        val refused = try { add(id, videoIds) }
+        catch (failure: java.io.IOException) { runCatching { delete(id) }; throw failure }
+        return Created(id, refused)
     }
 
-    /** Appends tracks in order; a track already in the playlist is added again, as Spotify does. */
-    fun add(playlistId: String, videoIds: List<String>) {
-        videoIds.chunked(EDIT_BATCH).forEach { chunk ->
-            edit(playlistId, chunk.map { JSONObject().put("action", "ACTION_ADD_VIDEO").put("addedVideoId", it) })
+    /**
+     * Appends tracks in order; a track already in the playlist is added again, as Spotify does.
+     * Without `DEDUPE_OPTION_SKIP`, YouTube Music refuses a whole batch (`STATUS_FAILED`) as soon as one
+     * video is already in the playlist. A batch refused anyway is split until the refused videos are
+     * isolated; those are returned and the others are added.
+     */
+    fun add(playlistId: String, videoIds: List<String>): List<String> {
+        val refused = ArrayList<String>()
+        fun send(chunk: List<String>) {
+            try {
+                edit(playlistId, chunk.map {
+                    JSONObject().put("action", "ACTION_ADD_VIDEO").put("addedVideoId", it).put("dedupeOption", "DEDUPE_OPTION_SKIP")
+                })
+            } catch (failure: YouTubeFailure) {
+                if (failure.status != "STATUS_FAILED") throw failure
+                if (chunk.size == 1) refused += chunk else chunk.chunked((chunk.size + 1) / 2).forEach(::send)
+            }
         }
+        videoIds.chunked(EDIT_BATCH).forEach(::send)
+        if (refused.isNotEmpty()) fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube-library",
+            "add refused=${refused.size} of ${videoIds.size}")
+        return refused
     }
 
     /** Removes one row: a duplicated track keeps its other rows. */
@@ -153,8 +176,23 @@ object YouTubeLibrary {
         YouTubeMusic.http.newCall(request).execute().use { response ->
             YouTubeAccount.updateCookies(response.headers("Set-Cookie"))
             if (response.code == 401) throw YouTubeAuthRequired("Google closed the session. Connect the account again.")
-            if (!response.isSuccessful) throw YouTubeFailure("YouTube Music answered ${response.code}.", response.code.toString())
-            return JSONObject(response.body?.string().orEmpty())
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                // Google's error status and reason say why ("PERMISSION_DENIED", "UNAUTHENTICATED", …); no account data.
+                val error = runCatching { JSONObject(text).optJSONObject("error") }.getOrNull()
+                val reason = listOfNotNull(error?.optString("status")?.takeIf(String::isNotBlank),
+                    error?.optJSONArray("errors")?.optJSONObject(0)?.optString("reason")?.takeIf(String::isNotBlank),
+                    error?.optString("message")?.take(120)?.takeIf(String::isNotBlank)).joinToString(" / ")
+                fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube-library",
+                    "status=${response.code} endpoint=$endpoint delegated=${context.has("user")} reason=\"$reason\"")
+                // A stored brand-account delegation that is refused: once more as the main account.
+                if (response.code == 403 && context.has("user") && credential === YouTubeAccount.current()) {
+                    YouTubeAccount.dropDelegation()
+                    return request(endpoint, body.apply { remove("context") }, YouTubeAccount.require())
+                }
+                throw YouTubeFailure("YouTube Music answered ${response.code}.", response.code.toString())
+            }
+            return JSONObject(text)
         }
     }
 
