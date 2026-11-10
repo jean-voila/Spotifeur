@@ -147,6 +147,39 @@ internal fun sapisidHash(sapisid: String, origin: String, nowSeconds: Long): Str
 internal fun cookieValue(cookie: String, name: String): String? = cookie.split(';')
     .map(String::trim).firstOrNull { it.startsWith("$name=") }?.substringAfter('=')?.takeIf(String::isNotEmpty)
 
+/** A YouTube Music page, by exact host: `music.youtube.com.example.org` is not one. */
+internal fun isYouTubeMusic(url: String?): Boolean = httpsUri(url)?.host?.lowercase() == "music.youtube.com"
+
+/**
+ * YouTube's home page, where Google sometimes leaves the sign-in instead of following `next` to
+ * YouTube Music: the mobile site, or the redirection after the consent page.
+ */
+internal fun isYouTubeHome(url: String?): Boolean {
+    val uri = httpsUri(url) ?: return false
+    return uri.host?.lowercase() in YOUTUBE_HOSTS && uri.path.orEmpty().trimEnd('/').isEmpty()
+}
+
+private val YOUTUBE_HOSTS = setOf("youtube.com", "www.youtube.com", "m.youtube.com")
+
+/** What the sign-in screen does once a page has loaded. */
+internal enum class SignInStep { Wait, Finish, OpenMusic, Fail }
+
+/**
+ * The sign-in ends on YouTube Music with a session. When Google leaves it on YouTube's home page
+ * instead, YouTube Music is opened, at most twice so that a redirection back to the home page can
+ * never loop. Any other end on the home page is a failure the screen reports: the user is never left
+ * there without a word.
+ */
+internal fun signInStep(url: String?, signedIn: Boolean, musicRedirects: Int): SignInStep = when {
+    isYouTubeMusic(url) -> if (signedIn) SignInStep.Finish else SignInStep.Wait
+    !isYouTubeHome(url) -> SignInStep.Wait
+    signedIn && musicRedirects < 2 -> SignInStep.OpenMusic
+    else -> SignInStep.Fail
+}
+
+private fun httpsUri(url: String?): java.net.URI? =
+    url?.let { runCatching { java.net.URI(it) }.getOrNull() }?.takeIf { it.scheme == "https" }
+
 /** `Set-Cookie` values applied to a `Cookie` header: new values replace old ones, expired cookies are removed. */
 internal fun mergeCookies(cookie: String, setCookies: List<String>): String {
     val values = LinkedHashMap<String, String>()

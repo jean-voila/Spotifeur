@@ -1,15 +1,20 @@
 package fr.spotifeur.data
 
+import fr.spotifeur.data.youtube.SignInStep
 import fr.spotifeur.data.youtube.YTM_PLAYLIST_PREFIX
+import fr.spotifeur.data.youtube.YouTubeCredential
 import fr.spotifeur.data.youtube.cookieValue
 import fr.spotifeur.data.youtube.delegatedPageId
 import fr.spotifeur.data.youtube.isEditablePlaylist
+import fr.spotifeur.data.youtube.isYouTubeHome
+import fr.spotifeur.data.youtube.isYouTubeMusic
 import fr.spotifeur.data.youtube.mergeCookies
 import fr.spotifeur.data.youtube.parseAccountMenu
 import fr.spotifeur.data.youtube.parseLibraryPlaylists
 import fr.spotifeur.data.youtube.parsePlaylistRows
 import fr.spotifeur.data.youtube.playlistPrivacy
 import fr.spotifeur.data.youtube.sapisidHash
+import fr.spotifeur.data.youtube.signInStep
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -36,6 +41,46 @@ class YouTubeAccountTest {
         assertEquals("main", cookieValue(cookie, "SAPISID"))
         assertEquals("three", cookieValue(cookie, "__Secure-3PAPISID"))
         assertNull(cookieValue(cookie, "SID"))
+    }
+
+    @Test fun signInPagesAreRecognizedByExactHost() {
+        assertTrue(isYouTubeMusic("https://music.youtube.com/"))
+        assertTrue(isYouTubeMusic("https://music.youtube.com/library?x=1"))
+        assertFalse(isYouTubeMusic("https://music.youtube.com.example.org/"))
+        assertFalse(isYouTubeMusic("http://music.youtube.com/"))
+        assertTrue(isYouTubeHome("https://www.youtube.com/"))
+        assertTrue(isYouTubeHome("https://m.youtube.com/?persist_app=1"))
+        assertTrue(isYouTubeHome("https://YouTube.com"))
+        // The sign-in handler, the consent page and other YouTube pages are left alone.
+        assertFalse(isYouTubeHome("https://www.youtube.com/signin?action_handle_signin=true"))
+        assertFalse(isYouTubeHome("https://consent.youtube.com/ml?continue=x"))
+        assertFalse(isYouTubeHome("https://www.youtube.com/watch?v=x"))
+        assertFalse(isYouTubeHome("https://www.youtube.com.example.org/"))
+        assertFalse(isYouTubeHome("not a url"))
+        assertFalse(isYouTubeHome(null))
+    }
+
+    @Test fun signInEndsOnYouTubeMusicOrReportsTheDeadEnd() {
+        val music = "https://music.youtube.com/"
+        val home = "https://m.youtube.com/"
+        assertEquals(SignInStep.Finish, signInStep(music, signedIn = true, musicRedirects = 0))
+        assertEquals(SignInStep.Finish, signInStep(music, signedIn = true, musicRedirects = 2))
+        assertEquals(SignInStep.Wait, signInStep(music, signedIn = false, musicRedirects = 0))
+        // Google's pages and the sign-in handler come before the end.
+        assertEquals(SignInStep.Wait, signInStep("https://accounts.google.com/ServiceLogin", signedIn = false, musicRedirects = 0))
+        assertEquals(SignInStep.Wait, signInStep("https://www.youtube.com/signin?action_handle_signin=true", signedIn = true, musicRedirects = 0))
+        assertEquals(SignInStep.OpenMusic, signInStep(home, signedIn = true, musicRedirects = 0))
+        assertEquals(SignInStep.OpenMusic, signInStep(home, signedIn = true, musicRedirects = 1))
+        // No loop, and no silent stop on the home page.
+        assertEquals(SignInStep.Fail, signInStep(home, signedIn = true, musicRedirects = 2))
+        assertEquals(SignInStep.Fail, signInStep(home, signedIn = false, musicRedirects = 0))
+    }
+
+    @Test fun eitherSessionCookieSignsIn() {
+        assertEquals("a", YouTubeCredential("SID=x; SAPISID=a").sapisid)
+        assertEquals("b", YouTubeCredential("SID=x; __Secure-3PAPISID=b").sapisid)
+        assertNull(YouTubeCredential("").sapisid)
+        assertNull(YouTubeCredential("VISITOR_INFO1_LIVE=v; YSC=y").sapisid)
     }
 
     @Test fun setCookieReplacesAndExpires() {
