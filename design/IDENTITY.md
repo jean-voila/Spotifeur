@@ -67,7 +67,11 @@ Material 3 Expressive shapes, as in the app:
 
 ## Writing on visuals
 
-Plain description only, no slogans. The banner carries only the name and the line "Open-source Spotify client for Android". Mockup labels name the screen ("Player", "Queue").
+Plain description only, no slogans. The banner carries the name, "Open-source music player for Android", the sources "Spotify · YouTube Music · Local files", and a player screenshot on the right. Mockup labels name the screen ("Player", "Queue"). Story and carousel presentation text is in English.
+
+The editable sources and reconstruction commands are listed in [README.md](README.md).
+The Instagram carousel uses a dark green-to-black gradient without background motifs;
+the README artwork and story keep the stacked jade shapes and small lavender accent.
 
 ## Sizes
 
@@ -76,3 +80,5 @@ Plain description only, no slogans. The banner carries only the name and the lin
 | Logo master | 1024 × 1024 | PNG with transparency + SVG |
 | GitHub social preview / README banner | 1280 × 640 | PNG |
 | Mockups | 2400 × 1350 each | PNG |
+| Instagram story | 1080 × 1920 | PNG |
+| Instagram carousel | 1080 × 1350 per slide | PNG |
