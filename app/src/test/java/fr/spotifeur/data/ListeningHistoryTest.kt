@@ -26,4 +26,16 @@ class ListeningHistoryTest {
         assertEquals(listOf("ytm:x", "spotify:track:b", "spotify:track:a", "spotify:track:a"), merged.map { it.track.id })
         assertEquals(listOf(false, true, false, true), merged.map { it.fromSpotify })
     }
+
+    @Test fun oneListeningSeenTwiceIsShownOnce() {
+        val song = Music("spotify:track:a", "a", "", MusicKind.Track, durationMs = 200_000)
+        val entries = listOf(
+            HistoryEntry(song, 1_000_000 + 400_000), // Played again after it ended: a new play.
+            HistoryEntry(song, 1_000_000 + 5_000), // The queue rebuilt a few seconds later: the same play.
+            HistoryEntry(song, 1_000_000),
+        )
+        assertEquals(listOf(1_400_000L, 1_000_000L), collapseRepeats(entries).map { it.playedAt })
+        assertEquals(true, isSameListening(entries.last(), song.id, 1_000_000 + 60_000))
+        assertEquals(false, isSameListening(entries.last(), "spotify:track:b", 1_000_000 + 60_000))
+    }
 }

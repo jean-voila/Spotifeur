@@ -144,4 +144,18 @@ class ReportedIssuesTest {
         assertTrue(youTubeAlbum in merged && device in merged)
         assertEquals(merged.size, merged.distinctBy(Music::id).size)
     }
+
+    @Test
+    fun mixedSearchKeepsSpotifysVersionAtTheBetterRank() {
+        // YouTube Music puts its artist card first; Spotify lists a track before the same artist.
+        val spotifyTrack = Music("spotify:track:0000000000000000000002", "Garage", "Wailtoad", MusicKind.Track)
+        val spotifyArtist = Music("spotify:artist:0000000000000000000001", "Wailtoad", "Artist", MusicKind.Artist)
+        val youTubeArtist = Music("ytm:artist:UCx", "Wailtoad", "Artist", MusicKind.Artist)
+        val merged = SearchRanking.merge("wailtoad", listOf(
+            SearchRanking.Source(listOf(spotifyTrack, spotifyArtist, spotifyTrack.copy(id = "spotify:track:0000000000000000000003", title = "Other"))),
+            SearchRanking.Source(listOf(youTubeArtist), 0.97),
+        ))
+        assertEquals(spotifyArtist, merged.first())
+        assertFalse(youTubeArtist in merged)
+    }
 }

@@ -231,7 +231,10 @@ fun HomeScreen(model: SpotifeurModel, navController: NavHostController, paddingV
                                     onOpen = { open(ui.likedSongs) },
                                     onLongPress = { showOptions(ui.likedSongs) },
                                     onPlay = {
-                                        ui.playSongs(content.savedTracks.map { it.toSong() }, content.savedTracks.first().toSong(), ui.likedSongs.title)
+                                        // The count is known before the tracks: without them, the list itself is opened.
+                                        val first = content.savedTracks.firstOrNull()
+                                        if (first == null) open(ui.likedSongs)
+                                        else ui.playSongs(content.savedTracks.map { it.toSong() }, first.toSong(), ui.likedSongs.title)
                                     },
                                 )
                             }

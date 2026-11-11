@@ -124,7 +124,42 @@ object YouTubeMusic {
     /** A catalogue request for the album, artist and track pages. */
     internal fun browseRequest(endpoint: String, body: JSONObject): JSONObject = musicRequest(endpoint, body)
 
+    /**
+     * When YouTube Music refuses requests from this connection (HTTP 403 or 429, usually after a burst
+     * such as a long conversion), sending more only extends the block. Until this elapsed-realtime
+     * instant, catalogue requests wait instead of being sent.
+     */
+    @Volatile private var blockedUntil = 0L
+    @Volatile private var blockLengthMs = MIN_BLOCK_MS
+
+    /** Milliseconds before YouTube Music should be asked again, 0 when it can be now. */
+    fun cooldownMs(): Long = (blockedUntil - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0)
+
+    private fun refused(code: Int) = code == 403 || code == 429
+
     private fun musicRequest(endpoint: String, body: JSONObject): JSONObject {
+        cooldownMs().takeIf { it > 0 }?.let { Thread.sleep(minOf(it, MAX_BLOCK_WAIT_MS)) }
+        return try { musicRequestOnce(endpoint, JSONObject(body.toString())).also { blockLengthMs = MIN_BLOCK_MS } }
+        catch (failure: YouTubeFailure) {
+            if (failure.status?.toIntOrNull()?.let(::refused) != true) throw failure
+            // The anonymous identity is the first suspect: a fresh one, once.
+            synchronized(this) { visitor = null; preferences?.edit { remove(KEY_VISITOR) } }
+            try { musicRequestOnce(endpoint, JSONObject(body.toString())).also { blockLengthMs = MIN_BLOCK_MS } }
+            catch (again: YouTubeFailure) {
+                if (again.status?.toIntOrNull()?.let(::refused) == true) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now >= blockedUntil) {
+                        blockedUntil = now + blockLengthMs
+                        fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube", "refused status=${again.status} pause=${blockLengthMs / 1000}s")
+                        blockLengthMs = minOf(blockLengthMs * 2, MAX_BLOCK_MS)
+                    }
+                }
+                throw again
+            }
+        }
+    }
+
+    private fun musicRequestOnce(endpoint: String, body: JSONObject): JSONObject {
         val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", MUSIC_CLIENT_VERSION).put("hl", "en").put("gl", "US")
         visitorData?.let { client.put("visitorData", it) }
         body.put("context", JSONObject().put("client", client))
@@ -272,6 +307,9 @@ object YouTubeMusic {
     }.getOrNull()
 
     private const val KEY_VISITOR = "visitor"
+    private const val MIN_BLOCK_MS = 15_000L
+    private const val MAX_BLOCK_MS = 120_000L
+    private const val MAX_BLOCK_WAIT_MS = 5_000L
     private const val MUSIC_API_KEY = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
     internal const val MUSIC_CLIENT_VERSION = "1.20250101.01.00"
     private const val SONGS_FILTER = "EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D"

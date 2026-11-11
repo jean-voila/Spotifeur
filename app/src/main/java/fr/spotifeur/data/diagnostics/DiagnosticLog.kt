@@ -48,6 +48,66 @@ object DiagnosticLog {
         scheduleWrite()
     }
 
+    /** Like [record], written to disk before returning: the process may be about to end. */
+    fun recordNow(area: String, message: String, limit: Int = 300) {
+        val line = "${synchronized(format) { format.format(Date()) }} $area ${message.replace('\n', ' ').take(limit)}"
+        runCatching { Log.e("SpotifeurDiagnostics", line) }
+        synchronized(entries) {
+            entries.addLast(line)
+            while (entries.size > MAX_ENTRIES) entries.removeFirst()
+        }
+        val target = file ?: return
+        runCatching { target.writeText(lines().joinToString("\n", postfix = "\n")) }
+    }
+
+    /**
+     * Uncaught exceptions go to the report with the top of their stack (class and method names only),
+     * and the process exits as usual afterwards.
+     */
+    fun catchCrashes() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching {
+                val chain = generateSequence(error) { it.cause }.take(4).joinToString(" <- ") { cause ->
+                    val frames = cause.stackTrace.take(6).joinToString(" ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
+                    "${cause.javaClass.name} \"${scrub(cause.message.orEmpty()).take(120)}\" at $frames"
+                }
+                recordNow("crash", "thread=${thread.name} $chain", limit = 2000)
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
+
+    /** Native crashes and ANRs of earlier runs, as Android kept them, once each. */
+    fun recordPastExits(context: Context) {
+        if (android.os.Build.VERSION.SDK_INT < 30) return
+        runCatching {
+            val manager = context.getSystemService(android.app.ActivityManager::class.java)
+            val preferences = context.getSharedPreferences("diagnostics", Context.MODE_PRIVATE)
+            val seen = preferences.getLong("last_exit", 0L)
+            val exits = manager.getHistoricalProcessExitReasons(context.packageName, 0, 5)
+                .filter { it.timestamp > seen && it.reason in setOf(
+                    android.app.ApplicationExitInfo.REASON_CRASH_NATIVE, android.app.ApplicationExitInfo.REASON_ANR,
+                    android.app.ApplicationExitInfo.REASON_CRASH, android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE,
+                ) }
+            exits.sortedBy { it.timestamp }.forEach { exit ->
+                val kind = when (exit.reason) {
+                    android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "native-crash"
+                    android.app.ApplicationExitInfo.REASON_ANR -> "anr"
+                    android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "init-failure"
+                    else -> "crash"
+                }
+                val at = synchronized(format) { format.format(Date(exit.timestamp)) }
+                record("exit", "$kind at=$at status=${exit.status} \"${exit.description?.take(200).orEmpty()}\"")
+            }
+            exits.maxOfOrNull { it.timestamp }?.let { latest -> preferences.edit().putLong("last_exit", latest).apply() }
+        }
+    }
+
+    /** Addresses and content identifiers stay out of the report. */
+    private fun scrub(text: String): String = text.replace(Regex("""https?://\S+"""), "<url>")
+        .replace(Regex("""(spotify|ytm):[a-z]+:\S+"""), "<id>").replace(Regex("""[0-9a-fA-F]{32,}"""), "<hex>")
+
     fun lines(): List<String> = synchronized(entries) { entries.toList() }
 
     fun clear() {

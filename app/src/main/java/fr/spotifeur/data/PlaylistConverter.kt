@@ -166,6 +166,8 @@ class PlaylistConversion(
     private val parallelism: Int = 3,
     private val searchAttempts: Int = 3,
     private val retryBaseMs: Long = 1_500,
+    /** Time the destination asked to be left alone; every lookup waits it out instead of failing. */
+    private val cooldownMs: () -> Long = { 0L },
 ) {
     private val mutable = MutableStateFlow(ConversionUi(source, target, source.title))
     val state: StateFlow<ConversionUi> = mutable.asStateFlow()
@@ -212,6 +214,7 @@ class PlaylistConversion(
      */
     private suspend fun lookup(track: Music): List<Pair<Music, Double>>? {
         repeat(searchAttempts) { attempt ->
+            cooldownMs().takeIf { it > 0 }?.let { kotlinx.coroutines.delay(it) }
             try { return ConversionMatching.rank(track, search.candidates(track)) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
@@ -227,7 +230,7 @@ class PlaylistConversion(
     }
 
     private fun retryDelayMs(failure: Exception, attempt: Int): Long {
-        val limited = (failure as? java.io.IOException)?.message?.let { "429" in it || "limiting" in it } == true
+        val limited = (failure as? java.io.IOException)?.message?.let { "429" in it || "403" in it || "limiting" in it } == true
         return (if (limited) retryBaseMs * 7 else retryBaseMs) * (attempt + 1)
     }
 

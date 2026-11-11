@@ -56,6 +56,7 @@ are illustrations. Editable artwork is in [`design/`](design/).
 - **Import and export.** Export a playlist as CSV, and import a CSV exported by Spotifeur or a YouTube, YouTube Music or Spotify playlist link.
 - **YouTube Music.** Search and play the YouTube Music catalog without a Google account, with the same downloads, cache, queue and playlists as Spotify tracks. Without a Spotify account, Spotify tracks play from their closest YouTube Music match (title, artist, album and duration).
 - **Google account.** Connect a Google account in Settings → Accounts to see your YouTube Music playlists in the library, create playlists on the account, rename them, make them public or private, add and remove tracks, and delete them. Audio still plays without the account.
+- **Liked YouTube Music tracks.** YouTube Music tracks can be liked like Spotify ones. They appear at the top of Liked songs, and are also liked on YouTube Music when a Google account is connected.
 - **Albums and artists.** Album pages, and artist pages with monthly listeners, popular tracks and their play counts, popular releases, albums, singles and EPs, compilations, appearances, related artists and the biography. YouTube Music tracks open YouTube Music's album and artist pages. Radios based on a track, an album, an artist or a playlist.
 - **Swipe on tracks.** Swiping a track right adds it to the queue. Each direction can be set to add to the queue, play next, save to Liked songs, remove from the playlist, or nothing.
 - **Search.** One search across Spotify, YouTube Music and the device's own files, for tracks, albums, artists and playlists, most relevant first, shown as each source answers, with paging. A setting shows a choice to search one source alone. Recent searches list what you opened or played. Each playlist has its own search by title, artist or album, above its first track.
@@ -95,7 +96,8 @@ Spotifeur uses the same services as the official Android app, so what you save, 
    check its SHA-256 against the release notes.
 2. **Install.** Open the APK on an ARM64 phone with Android 8.0 or later.
 3. **Set up.** Sign in with your Spotify email address and the code Spotify sends
-   you, or continue without an account for YouTube Music and local files.
+   you, or with the Google account linked to your Spotify account, or continue
+   without an account for YouTube Music and local files.
 
 See the [FAQ](docs/FAQ.md) for account, playback and installation details.
 
@@ -124,7 +126,7 @@ official Spotify APK you supply.
 <summary><b>Account and privacy</b></summary>
 
 - There is no Spotifeur server, no analytics and no tracking. The app talks to Spotify, to YouTube Music, and to [LRCLIB](https://lrclib.net) for lyrics Spotify does not have (title, artist, album and duration only; you can turn it off).
-- Your password is never stored. The email-code sign-in does not use one at all.
+- Your password is never stored. The email-code sign-in does not use one at all. Signing in to Spotify with Google happens on Google's page; Spotifeur only passes the one-time code it returns to Spotify and keeps nothing else from it.
 - The session credential stays on your device, encrypted with Android Keystore.
 - A Google account is signed in on Google's own page. Spotifeur keeps the cookies it leaves, encrypted with Android Keystore, and only sends them to music.youtube.com.
 - Each release lists the SHA-256 of the APK and of its signing certificate. You can also build the APK yourself from this source and your own copy of the official Spotify APK.

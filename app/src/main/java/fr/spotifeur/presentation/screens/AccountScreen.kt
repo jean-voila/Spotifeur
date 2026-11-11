@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,6 +59,16 @@ import fr.spotifeur.ui.theme.GoogleSansRounded
 fun AccountScreen(model: SpotifeurModel, account: AccountUi) {
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
+    var google by remember { mutableStateOf(false) }
+    var googleFailed by remember { mutableStateOf(false) }
+    if (google) {
+        SpotifyGoogleSignIn(
+            onSigned = { code, idToken -> google = false; googleFailed = false; model.connectSpotifyGoogle(code, idToken, SPOTIFY_GOOGLE_REDIRECT) },
+            onFailed = { google = false; googleFailed = true },
+            onClose = { google = false },
+        )
+        return
+    }
     Surface(Modifier.fillMaxSize(), color = colors.background) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), contentAlignment = Alignment.TopCenter) {
             // The name alone at the top, the choices at the bottom within reach of the thumb.
@@ -88,7 +99,7 @@ fun AccountScreen(model: SpotifeurModel, account: AccountUi) {
                                     style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
                             }
                         }
-                        SignInForm(account, model)
+                        SignInForm(account, model, googleFailed) { googleFailed = false; google = true }
                     }
                 }
                 if (account.codeLength == null) FilledTonalButton(
@@ -103,7 +114,7 @@ fun AccountScreen(model: SpotifeurModel, account: AccountUi) {
 }
 
 @Composable
-private fun SignInForm(account: AccountUi, model: SpotifeurModel) {
+private fun SignInForm(account: AccountUi, model: SpotifeurModel, googleFailed: Boolean, onGoogle: () -> Unit) {
     val ctx = LocalContext.current
     val focus = LocalFocusManager.current
     val autofill = LocalAutofillManager.current
@@ -188,13 +199,21 @@ private fun SignInForm(account: AccountUi, model: SpotifeurModel) {
                             else -> ctx.getString(R.string.login_with_code)
                         })
                     }
+                    OutlinedButton(
+                        onClick = onGoogle,
+                        enabled = !working,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(56.dp),
+                    ) {
+                        Icon(painterResource(R.drawable.ic_google), null, Modifier.size(20.dp))
+                        Text(ctx.getString(R.string.login_with_google), Modifier.padding(start = 10.dp))
+                    }
                     TextButton(
                         onClick = { passwordMode = !passwordMode; password = "" },
                         enabled = !working,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) { Text(if (passwordMode) ctx.getString(R.string.login_use_code) else ctx.getString(R.string.login_use_password)) }
                     if (account.working) TextButton(onClick = model::disconnectSpotify) { Text(ctx.getString(R.string.action_cancel)) }
-                    account.error?.let {
+                    (account.error ?: ctx.getString(R.string.spotify_google_failed).takeIf { googleFailed && !working })?.let {
                         Text(it, Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error)
                     }
                 }

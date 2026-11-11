@@ -49,12 +49,20 @@ internal class SpotifyCatalog(
     private val session: SpotifySession,
     /** Reads a playlist page through the native core when Playlist4 over HTTP refuses it. */
     private val nativePlaylist: (suspend (uri: String, from: Int, length: Int, fallback: Music) -> PlaylistPage)? = null,
+    /** Reads entities through the native core when Extended Metadata over HTTP refuses them. */
+    private val nativeMetadata: (suspend (uris: List<String>) -> Map<String, ByteArray>)? = null,
 ) {
     private val musicCache = ConcurrentHashMap<String, Music>()
     private val metadataCache = ConcurrentHashMap<String, ByteArray>()
     private val requests = Semaphore(4)
     /** Library sync reads one batch at a time, so a page the user opens is never queued behind it. */
     private val backgroundRequests = Semaphore(1)
+    /**
+     * Elapsed-realtime instant until which the library sync leaves metadata alone, after the service
+     * refused most of a batch. Asking again at once for thousands of saved tracks only prolongs a refusal.
+     */
+    @Volatile private var backgroundPausedUntil = 0L
+    @Volatile private var backgroundPauseMs = MIN_BACKGROUND_PAUSE_MS
 
     /** Metadata already on the device, so only what is new gets requested. */
     fun seed(items: List<Music>) = items.forEach { if (it.title.isNotEmpty()) musicCache.putIfAbsent(it.id, it) }
@@ -63,10 +71,13 @@ internal class SpotifyCatalog(
         val valid = uris.mapNotNull(::canonicalMusicUri)
         val missing = valid.distinct().filter { musicCache[it] == null }
         val background = kotlin.coroutines.coroutineContext[BackgroundRequestsKey] != null
+        if (background && missing.isNotEmpty() && android.os.SystemClock.elapsedRealtime() < backgroundPausedUntil) {
+            throw SpotifyFailure("Spotify metadata: paused after refusals.")
+        }
         missing.filter { metadataKind(it) != null }.chunked(40).map { chunk ->
             async {
-                if (background) backgroundRequests.withPermit { requests.withPermit { fetchMetadata(chunk) } }
-                else requests.withPermit { fetchMetadata(chunk) }
+                if (background) backgroundRequests.withPermit { requests.withPermit { fetchMetadata(chunk, background = true) } }
+                else requests.withPermit { fetchMetadata(chunk, background = false) }
             }
         }.awaitAll()
         // Keep playlist order and duplicate tracks. Unsupported entities never enter the music model.
@@ -76,7 +87,7 @@ internal class SpotifyCatalog(
     suspend fun metadataBytes(uri: String): ByteArray {
         val canonical = canonicalMusicUri(uri) ?: throw SpotifyFailure("Invalid Spotify ID.")
         if (metadataKind(canonical) == null) throw SpotifyFailure("Metadata unavailable for this item.")
-        if (metadataCache[canonical] == null) requests.withPermit { fetchMetadata(listOf(canonical)) }
+        if (metadataCache[canonical] == null) requests.withPermit { fetchMetadata(listOf(canonical), background = false) }
         return metadataCache[canonical] ?: throw SpotifyFailure("This item is not available in the catalog.")
     }
 
@@ -124,7 +135,9 @@ internal class SpotifyCatalog(
                 remember(tracks + albums + relatedArtists)
                 val about = if (background) null else artistAbout(artist.id)
                 val profile = if (background) null else ArtistProfile(
-                    monthlyListeners = extras.monthlyListeners ?: about?.listeners,
+                    // The About service gives the count the official page shows. The reputation trait's
+                    // field 1 is another, much smaller count on some artists: it is not used for this.
+                    monthlyListeners = about?.listeners,
                     worldRank = about?.rank,
                     playCounts = trackPlayCounts(tracks.map(Music::id)),
                     popularReleases = popular,
@@ -149,19 +162,63 @@ internal class SpotifyCatalog(
     }
 
     // Decoding hundreds of entities is CPU work: keep it off the caller's (often main) thread.
-    private suspend fun fetchMetadata(uris: List<String>): Unit = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-        val missing = requestMetadata(uris, catalogue = null)
+    private suspend fun fetchMetadata(uris: List<String>, background: Boolean): Unit = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        fun mostlyMissing(missing: List<String>) = missing.isNotEmpty() && missing.size * 2 >= uris.size
+        // A server error is a batch refused as a whole: the native core may still read it.
+        var missing = try { requestMetadata(uris, catalogue = null) }
+        catch (failure: SpotifyFailure) {
+            if (failure is SpotifyAuthRequired || failure is SpotifyRateLimited || failure.status == null || nativeMetadata == null || background) throw failure
+            uris
+        }
         // A few missing items are unavailable releases. Most of a batch missing means the service refused it:
         // ask again stating the account's catalogue, as the request header allows.
-        if (missing.isEmpty() || missing.size * 2 < uris.size) return@withContext
+        if (!mostlyMissing(missing)) { backgroundPauseMs = MIN_BACKGROUND_PAUSE_MS; return@withContext }
         val attributes = session.lastAttributes ?: try { spotifyAttributes(transport, session) }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (auth: SpotifyAuthRequired) { throw auth }
             catch (_: java.io.IOException) { null }
-        val catalogue = attributes?.get("catalogue")?.takeIf(String::isNotBlank) ?: return@withContext
-        val still = requestMetadata(missing, catalogue)
-        if (still.size < missing.size) {
-            fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata", "recovered=${missing.size - still.size} of ${missing.size} with catalogue=$catalogue")
+        val catalogue = attributes?.get("catalogue")?.takeIf(String::isNotBlank)
+        if (catalogue != null) {
+            val still = try { requestMetadata(missing, catalogue) } catch (failure: SpotifyFailure) {
+                if (failure is SpotifyAuthRequired || failure is SpotifyRateLimited) throw failure
+                missing
+            }
+            if (still.size < missing.size) {
+                fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata", "recovered=${missing.size - still.size} of ${missing.size} with catalogue=$catalogue")
+            }
+            missing = still
+        }
+        if (!mostlyMissing(missing)) return@withContext
+        if (background) {
+            // The sync waits; what the user opens still goes through, with the native fallback.
+            backgroundPausedUntil = android.os.SystemClock.elapsedRealtime() + backgroundPauseMs
+            fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata", "background paused ${backgroundPauseMs / 1000}s after missing=${missing.size} of ${uris.size}")
+            backgroundPauseMs = minOf(backgroundPauseMs * 2, MAX_BACKGROUND_PAUSE_MS)
+            return@withContext
+        }
+        val native = nativeMetadata ?: return@withContext
+        val read = try { native(missing) }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata", "native failed ${error.javaClass.simpleName} \"${error.message}\"")
+            return@withContext
+        }
+        read.forEach { (uri, bytes) -> keep(uri, bytes) }
+        fr.spotifeur.data.diagnostics.DiagnosticLog.record("metadata", "native recovered=${read.size} of ${missing.size}")
+    }
+
+    private fun keep(uri: String, bytes: ByteArray) {
+        metadataCache[uri] = bytes
+        val entity = Proto(bytes)
+        val music = when (metadataKind(uri)) {
+            8 -> decodeMetadataArtist(entity)
+            9 -> decodeMetadataAlbum(entity)
+            10 -> decodeMetadataTrack(entity)
+            else -> null
+        }
+        if (music != null) {
+            musicCache[uri] = music
+            musicCache[music.id] = music
         }
     }
 
@@ -182,20 +239,7 @@ internal class SpotifyCatalog(
             "Spotify metadata", body,
         )
         val decoded = decodeMetadataExtensions(response)
-        decoded.forEach { (uri, bytes) ->
-            metadataCache[uri] = bytes
-            val entity = Proto(bytes)
-            val music = when (metadataKind(uri)) {
-                8 -> decodeMetadataArtist(entity)
-                9 -> decodeMetadataAlbum(entity)
-                10 -> decodeMetadataTrack(entity)
-                else -> null
-            }
-            if (music != null) {
-                musicCache[uri] = music
-                musicCache[music.id] = music
-            }
-        }
+        decoded.forEach { (uri, bytes) -> keep(uri, bytes) }
         val missing = uris.filter { metadataKind(it) != null && it !in decoded }
         if (missing.isNotEmpty()) recordMissingMetadata(response, uris.size, missing.size, catalogue)
         return missing
@@ -349,7 +393,8 @@ internal class SpotifyCatalog(
         }.decodeToString())
         ArtistAbout(
             listeners = json.optLong("monthlyListeners", json.optLong("listenerCount", 0)).takeIf { it > 0 },
-            rank = json.optInt("monthlyListenerRank", json.optJSONObject("monthlyListenerRank")?.optInt("rank") ?: 0).takeIf { it > 0 },
+            rank = (json.optInt("globalChartPosition", 0).takeIf { it > 0 }
+                ?: json.optInt("monthlyListenerRank", json.optJSONObject("monthlyListenerRank")?.optInt("rank") ?: 0)).takeIf { it > 0 },
             biography = cleanBiography(json.optString("biography")),
             headerImage = json.optJSONObject("headerImage")?.optString("uri")?.let(::spotifyArtwork),
         )
@@ -364,6 +409,8 @@ internal class SpotifyCatalog(
 private const val PLAYLIST_PAGE = 100
 private const val MAX_RELEASES_PER_GROUP = 60
 private const val MAX_APPEARS_ON = 20
+private const val MIN_BACKGROUND_PAUSE_MS = 2 * 60_000L
+private const val MAX_BACKGROUND_PAUSE_MS = 30 * 60_000L
 
 /** Statuses for which another way of reading the playlist may succeed: not auth, access, rate limits or a missing list. */
 internal fun playlistFallbackApplies(failure: SpotifyFailure): Boolean =

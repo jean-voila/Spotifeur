@@ -8,6 +8,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 /** The server does not take this Login5 version or request layout; another version may. */
 internal class Login5ProtocolRefused(message: String) : SpotifyFailure(message)
 
+/** Login5 answered with an error code (`LoginResponse` field 2). */
+internal class Login5Error(message: String, val error: Int, status: Int? = null) : SpotifyFailure(message, status)
+
 internal class StoredCredential(val username: String, val bytes: ByteArray)
 
 internal class LoginGrant(val access: String, val expiresAt: Long, val credential: StoredCredential?) {
@@ -53,6 +56,37 @@ internal class Login5(
         } finally {
             credential.fill(0)
         }
+    }
+
+    /**
+     * Sign-in with Google: `GoogleSignInCredential` as field 108 (v4: 1 auth_code, 2 redirect_uri, 3 id_token).
+     * The 9.2 app sends either an ID token alone (Credential Manager) or an auth code with its redirect
+     * address (Google Sign-In). The ID token is tried first, then the code; v3 (code only) if v4 is
+     * refused as a protocol.
+     */
+    suspend fun google(clientToken: String, authCode: String?, idToken: String?, redirectUri: String, code: suspend (Int) -> String): LoginGrant {
+        val attempts = listOfNotNull(
+            idToken?.let { token -> "id_token" to proto { writeString(3, token) } },
+            authCode?.let { value -> "auth_code" to proto { writeString(1, value); writeString(2, redirectUri) } },
+        )
+        require(attempts.isNotEmpty())
+        var refused: SpotifyFailure? = null
+        try {
+            for ((kind, credential) in attempts) {
+                try {
+                    return exchange(clientToken, GOOGLE_SIGN_IN, credential, version = 4, flowId = java.util.UUID.randomUUID().toString(), requestCode = code)
+                } catch (failure: Login5Error) {
+                    fr.spotifeur.data.diagnostics.DiagnosticLog.record("login", "google $kind v4 error=${failure.error}")
+                    refused = failure
+                } catch (failure: Login5ProtocolRefused) {
+                    if (kind != "auth_code") { refused = failure; continue }
+                    return exchange(clientToken, GOOGLE_SIGN_IN, credential, requestCode = code)
+                }
+            }
+        } finally {
+            attempts.forEach { it.second.fill(0) }
+        }
+        throw refused ?: SpotifyFailure("Spotify sign-in with Google failed.")
     }
 
     suspend fun restore(clientToken: String, saved: StoredCredential): LoginGrant =
@@ -101,17 +135,22 @@ internal class Login5(
             response.message(1)?.let(::readGrant)?.let { return it }
             response.number(2)?.let { error ->
                 throw when (error) {
-                    1 -> SpotifyFailure(
+                    1 -> Login5Error(
                         when {
                             method == 111 && codeSubmitted -> "Spotify rejected the login code. Start signing in again."
                             method == 111 -> "Spotify rejected the email sign-in."
+                            method == GOOGLE_SIGN_IN -> "Spotify did not accept this Google account. It must be linked to a Spotify account."
                             else -> "Spotify rejected the credentials."
                         },
-                        401,
+                        1, 401,
                     )
                     3 -> Login5ProtocolRefused("Spotify rejected Android login protocol v$version.")
+                    5 -> Login5Error(
+                        if (method == GOOGLE_SIGN_IN) "Spotify found no account linked to this Google account."
+                        else "Spotify does not know this account.", 5, 401,
+                    )
                     6, 8 -> SpotifyFailure("Spotify asks to try again later.", 429)
-                    else -> SpotifyFailure("Spotify sign-in rejected (code $error).")
+                    else -> Login5Error("Spotify sign-in rejected (code $error).", error)
                 }
             }
 
@@ -165,3 +204,6 @@ internal class Login5(
         return LoginGrant(access, SystemClock.elapsedRealtime() + expiry * 1000L - minOf(30_000L, expiry * 100L), saved)
     }
 }
+
+/** `LoginRequest` field of `GoogleSignInCredential` (librespot's v3 schema; accepted as a credential in v4). */
+internal const val GOOGLE_SIGN_IN = 108

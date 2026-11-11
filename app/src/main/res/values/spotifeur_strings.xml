@@ -98,6 +98,9 @@
     <string name="login_with_code">Sign in</string>
     <string name="login_use_code">Use an email code</string>
     <string name="login_use_password">Use a password</string>
+    <string name="login_with_google">Sign in with Google</string>
+    <string name="spotify_google_title">Sign in with Google</string>
+    <string name="spotify_google_failed">Google did not complete the sign-in. Try again.</string>
     <string name="share_item">Share %1$s</string>
     <string name="no_tracks_for">No tracks to play for “%1$s”.</string>
     <string name="code_prompt_email">Code sent to %1$s</string>
@@ -289,6 +292,7 @@
     <string name="convert_to_review">To check (%1$d)</string>
     <string name="convert_create">Create playlist · %1$s</string>
     <string name="convert_failed">The playlist could not be created.</string>
+    <string name="youtube_refused">YouTube Music is refusing requests from this connection for now. Try again in a few minutes.</string>
     <string name="convert_done">“%1$s” created</string>
     <string name="convert_row_searching">Searching…</string>
     <string name="convert_row_missing">No match found</string>

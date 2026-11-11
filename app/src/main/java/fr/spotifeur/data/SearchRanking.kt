@@ -5,23 +5,33 @@ import fr.spotifeur.utils.foldForSearch
 /**
  * Orders results of several catalogues in one list, as the official search orders its own: how
  * closely the name matches what was typed first, then the rank each service gave the result.
- * A track, album or artist found on Spotify and on YouTube Music is shown once, the better ranked
- * of the two (Spotify's weight is a little higher); device files are always kept.
+ * A track, album or artist found on Spotify and on YouTube Music is shown once, at the better rank of
+ * the two, as the version of the source listed first (Spotify): its page has the account's actions
+ * and Spotify's figures. Device files are always kept.
  */
 object SearchRanking {
     class Source(val items: List<Music>, val weight: Double = 1.0, val deduplicated: Boolean = true)
 
     fun merge(query: String, sources: List<Source>): List<Music> {
-        val seen = HashSet<String>()
-        return sources.flatMapIndexed { order, source ->
+        val scored = sources.flatMapIndexed { order, source ->
             source.items.mapIndexed { index, item -> Scored(item, score(query, item, index) * source.weight, order, source.deduplicated) }
-        }.sortedWith(compareByDescending<Scored> { it.score }.thenBy { it.order })
-            .filter { scored -> !scored.deduplicated || seen.add(identity(scored.item)) }
+        }
+        // Per identity: the best rank any source gave it, and the version of the first source that has it.
+        val best = HashMap<String, Double>()
+        val chosen = HashMap<String, Scored>()
+        scored.filter { it.deduplicated }.forEach { entry ->
+            val key = identity(entry.item)
+            best.merge(key, entry.score, ::maxOf)
+            val current = chosen[key]
+            if (current == null || entry.order < current.order || (entry.order == current.order && entry.score > current.score)) chosen[key] = entry
+        }
+        val kept = scored.filter { !it.deduplicated } + chosen.values.map { it.copy(score = best.getValue(identity(it.item))) }
+        return kept.sortedWith(compareByDescending<Scored> { it.score }.thenBy { it.order })
             .map { it.item }
             .distinctBy(Music::id)
     }
 
-    private class Scored(val item: Music, val score: Double, val order: Int, val deduplicated: Boolean)
+    private data class Scored(val item: Music, val score: Double, val order: Int, val deduplicated: Boolean)
 
     internal fun score(query: String, item: Music, index: Int): Double = relevance(query, item) * 0.65 + 0.35 / (1 + index * 0.15)
 

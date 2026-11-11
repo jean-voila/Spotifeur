@@ -153,7 +153,29 @@ object YouTubeLibrary {
 
     private fun bareId(playlistId: String) = playlistId.removePrefix(YTM_PLAYLIST_PREFIX).removePrefix("VL")
 
+    /** Likes a track on the account (it then appears in Liked Music), or removes the like. */
+    fun like(videoId: String, liked: Boolean) {
+        request(if (liked) "like/like" else "like/removelike", JSONObject().put("target", JSONObject().put("videoId", videoId)))
+    }
+
+    /**
+     * Google answers 403 or 429 to every request from a connection it is limiting for a while (after a
+     * long conversion, for instance). A change is tried again a little later instead of failing at once.
+     */
     private fun request(endpoint: String, body: JSONObject, credential: YouTubeCredential = YouTubeAccount.require()): JSONObject {
+        var attempt = 0
+        while (true) {
+            YouTubeMusic.cooldownMs().takeIf { it > 0 }?.let { Thread.sleep(minOf(it, MAX_COOLDOWN_WAIT_MS)) }
+            try { return requestOnce(endpoint, JSONObject(body.toString()), credential) }
+            catch (failure: YouTubeFailure) {
+                val refused = failure.status == "403" || failure.status == "429"
+                if (!refused || endpoint == "account/account_menu" || attempt >= RETRY_DELAYS_MS.size) throw failure
+                Thread.sleep(RETRY_DELAYS_MS[attempt++])
+            }
+        }
+    }
+
+    private fun requestOnce(endpoint: String, body: JSONObject, credential: YouTubeCredential): JSONObject {
         val sapisid = credential.sapisid ?: throw YouTubeAuthRequired("The Google session is incomplete. Connect the account again.")
         val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YouTubeMusic.MUSIC_CLIENT_VERSION)
             .put("hl", "en").put("gl", "US")
@@ -188,7 +210,7 @@ object YouTubeLibrary {
                 // A stored brand-account delegation that is refused: once more as the main account.
                 if (response.code == 403 && context.has("user") && credential === YouTubeAccount.current()) {
                     YouTubeAccount.dropDelegation()
-                    return request(endpoint, body.apply { remove("context") }, YouTubeAccount.require())
+                    return requestOnce(endpoint, body.apply { remove("context") }, YouTubeAccount.require())
                 }
                 throw YouTubeFailure("YouTube Music answered ${response.code}.", response.code.toString())
             }
@@ -200,6 +222,8 @@ object YouTubeLibrary {
     private const val MAX_LIBRARY_PAGES = 20
     private const val MAX_TRACKS = 5000
     private const val EDIT_BATCH = 100
+    private val RETRY_DELAYS_MS = longArrayOf(4_000, 12_000)
+    private const val MAX_COOLDOWN_WAIT_MS = 30_000L
     private val JSON = "application/json".toMediaType()
 }
 

@@ -4,6 +4,30 @@
 
 Nothing yet.
 
+## v1.5.0
+
+### Added
+
+- Sign in to Spotify with Google. The button opens Google's authorization page for Spotify's own Google client (the one `accounts.spotify.com` and the 9.2 app use) in a WebView, asking for a code and an ID token (`response_type=code id_token`, with a state and a nonce). The redirect back to `accounts.spotify.com/login/google/redirect` is stopped before it loads, and Login5 gets `GoogleSignInCredential` (field 108): the ID token alone first (v4 field 3, as the app's Credential Manager path), then the code with its redirect address (fields 1 and 2), as the app's Google Sign-In path. The WebView's user agent no longer announces a WebView, which Google refuses for its sign-in, and its cookies are cleared afterwards. A Google account that is not linked to a Spotify account gets a plain message (Login5 error 5). Checked live: made-up codes and tokens are refused as invalid credentials (error 1), and a real Google account no longer linked to Spotify gets error 5. A sign-in with a linked account was not run before this release.
+- Liking a YouTube Music track works. The heart in the player did nothing for these tracks and the track menu did not show it. Spotify's liked songs cannot hold them, so they are kept on the device and listed at the top of Liked songs (with source marks in that list, the count includes them); with a Google account connected they are also liked on YouTube Music (`like/like`, `like/removelike`). Without a Spotify account, Liked songs shows them alone.
+- Recent searches show where each result comes from (Spotify, YouTube Music or a device file), like the result list.
+- The popular tracks of an artist page show their covers.
+- Crashes go to the diagnostic report: an uncaught exception with the top of its stack (class and method names, no addresses or identifiers), and, at the next start, native crashes and ANRs that Android recorded for the app (`ApplicationExitInfo`).
+
+### Fixed
+
+- Monthly listeners were wrong or missing. The count came first from extension 185 field 1, which is not the monthly listeners on every artist (415 for an artist with 27,382); it now comes from `creatorabout` only, with `globalChartPosition` as the world rank. An artist page opened by the user is read again after an hour instead of a week, so the figures stay current; the background sync keeps its weekly pace.
+- Search showed the YouTube Music version of an artist (or album, or track) when YouTube Music ranked it higher, so its page had no Spotify figures, like or radio. A result both services have is now shown at the better rank of the two, as Spotify's version.
+- YouTube Music conversion and pages after a burst of requests: during a long conversion YouTube Music started answering HTTP 403 (an HTML page, no reason) to every request from the connection, anonymous or signed in, for a while. The searches kept retrying into the block, which made the conversion slow, and creating the playlist at the end then failed with 403; artist and album pages failed the same way. Now a refused catalogue request is retried once with a fresh anonymous identity; if it is refused again, YouTube Music is left alone for 15 s (doubling up to 2 min) and every lookup waits for that instead of failing. Account changes (create, add, edit, like) are tried again after 4 and 12 s. If YouTube Music still refuses, the converter says so in plain words and the playlist can be created again from the same screen. The YouTube Music conversion runs four searches at a time instead of three.
+- Listening history showed the same play twice or more when the queue was rebuilt (shuffle, a new queue around the same track, the app restarted while playing). A play is no longer recorded when the newest entry is the same track started less than 90% of its length earlier (30 s minimum), and repeats already stored are merged when the history is shown.
+- Playlists without their tracks on some Free accounts: Extended Metadata over HTTP answered 200 with every entity refused (statuses 502 and 403, reported in two diagnostic reports). When most of a batch stays without data after the `catalogue` retry, the entities are now read through the native core's `ClassicMetadataService/MultigetEntity`, the path the official app's pages use (the engine sends its own request to the regional spclient host). The library sync stops asking for metadata for 2 min (doubling up to 30 min) after such a refusal instead of requesting thousands of saved tracks into it; what the user opens still goes through.
+- The play button of the Liked songs card crashed the app when the count was known but no track had loaded yet; it now opens the list.
+- A native playlist read that failed was reported as `InvocationTargetException "null"`; the engine's own error is reported now.
+
+### Changed
+
+- The native HTTP layer logs the shape of the engine's metadata requests (route and field numbers, no content) to logcat.
+
 ## v1.4.0
 
 ### Added

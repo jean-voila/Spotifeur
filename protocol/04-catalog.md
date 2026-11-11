@@ -36,6 +36,19 @@ Each `ExtensionQuery` has 1 `extension_kind` (enum) and 2 `etag`.
 
 Skip arrays or entities whose status is neither 0 nor 200.
 
+### Through the native core
+
+The engine has its own entry point, `spotify.metadata_esperanto.proto.ClassicMetadataService` (descriptor `metadata_esperanto.proto`):
+
+| Method | Request | Response |
+| --- | --- | --- |
+| `GetEntity` | `GetEntityRequest`: 1 `uri` | `GetEntityResponse`: 1 `MetadataItem` |
+| `MultigetEntity` | `MultiRequest`: 1 `uris[]` | `MultiResponse`: 1 `items[]` |
+
+`MetadataItem` (`metadata_cosmos.proto`) is a oneof: 1 `error` (sint32), 2 `artist`, 3 `album`, 4 `track`, 5 `show`, 6 `episode`, each the `metadata.proto` message described below.
+
+**Live, 2026-11-11:** `MultigetEntity` for five tracks and two albums returned seven items in request order, in 0.65 s on a warm engine. The engine sent its own `extended-metadata/v0/extended-metadata` request to the regional host given by `apresolve` (`gew1-spclient.spotify.com`), not to `spclient.wg.spotify.com`. Spotifeur uses this path when the HTTP request leaves most of a batch without data.
+
 The request header (`BatchedEntityRequestHeader`, descriptor at `0x66df3c`: 1 `country`, 2 `catalogue`, 3 `task_id`) is optional. Spotifeur sends none, and only when most of a batch comes back without data asks again with the account's `catalogue` attribute; the statuses of such a response go to the diagnostic report. Whether the header changes anything for an account was not established.
 
 ### Extension kinds used
@@ -56,19 +69,21 @@ The official artist page reads more than `metadata.Artist`. The `ExtensionKind` 
 | 152 | `POPULAR_RELEASES` | `spotify.creators.v1.PopularReleases` | 1 `release[]`, each 1 = album URI |
 | 165 | `RELATED_CREATORS_SECTION` | `spotify.creators.v1.RelatedCreators` | 1 → 1 `artist[]`, each 1 = artist URI |
 | 169 | `TOP_PLAYABLES_SECTION` | `spotify.creators.v1.TopPlayables` | 1 → 1 `track[]`, each 1 = track URI |
-| 185 | `ON_PLATFORM_REPUTATION_TRAIT` | `spotify.contentagnostic.v2.OnPlatformReputationTrait` | artist: 1 = monthly listeners, 7 → 1 → 1 badge text ("Top Artists"), 9 → 1 not established; track: 3 = play count (varints) |
+| 185 | `ON_PLATFORM_REPUTATION_TRAIT` | `spotify.contentagnostic.v2.OnPlatformReputationTrait` | artist: 1 = a count that is not always the monthly listeners (see below), 7 → 1 → 1 badge text ("Top Artists"), 9 → 1 not established; track: 3 = play count (varints) |
 | 200 | `CREATOR_PLAYLISTS_SECTION` | `spotify.creators.v1.CreatorPlaylists` | 1 → 1 `playlist[]` |
 | 203 | `CREATOR_APPEARS_ON_SECTION` | `spotify.creators.v1.CreatorAppearsOn` | 1 → 1 `album[]` |
 | 206 | `ARTIST_HEADLINE` | `spotify.artistsectionprovider.v1.ArtistHeadline` | upcoming release card |
 
 **Live, 2026-11-10:** kind 185 on an artist returned its monthly listeners in field 1 (24,738,114), and on four tracks their play counts in field 3 (for example 1,361,093,322). One request for a single track came back with an empty payload, so a missing value is normal. Kind 60 (`STREAM_COUNT`) answered 404 for tracks, albums and artists. On an album URI, kind 185 answered 404.
 
+**Live, 2026-11-11:** on a small artist, kind 185 field 1 was 415, while the official app showed 27.4k monthly listeners and `creatorabout` gave 27,382. Field 1 matches the monthly listeners on some artists only, so Spotifeur takes the count from `creatorabout` alone.
+
 ```text
 GET spclient/creatorabout/v0/artist/{artistId}/about?fields=artist,listenerCount,monthlyListenerRank,isVerified
 Accept: application/json
 ```
 
-Static: the two query strings are in `classes5.dex`. **Live:** the JSON has `name`, `isVerified`, `mainImageUrl`, `headerImage.uri`, `biography` and `autobiography.links`. `pathfinder/v2/query` on `api-partner.spotify.com` answered 403 to the Login5 token, whatever the persisted query hash.
+Static: the two query strings are in `classes5.dex`. **Live:** the JSON has `name`, `isVerified`, `mainImageUrl`, `headerImage.uri`, `biography` and `autobiography.links`. **Live, 2026-11-11:** with the `fields` query above, the JSON also has `monthlyListeners`, `monthlyListenersDelta` and `globalChartPosition`; without `fields` it has only `artistGid`. `pathfinder/v2/query` on `api-partner.spotify.com` answered 403 to the Login5 token, whatever the persisted query hash.
 
 ### `metadata.proto`
 

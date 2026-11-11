@@ -27,4 +27,21 @@ class Login5NetworkTest {
             assertEquals(failure.message, 401, failure.status)
         }
     }
+
+    /** A made-up Google code: Login5 must refuse it as a credential (not as an unknown request layout). */
+    @Test
+    fun googleCredentialReachesCredentialRefusal() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("spotifyNetwork") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val session = SpotifySession(context, SpotifyTransport(), SessionVault(context), UUID.randomUUID().toString())
+        try {
+            session.connectGoogle("4/0Aspotifeur-protocol-check", "eyJhbGciOiJSUzI1NiJ9.e30.c3BvdGlmZXVy", "https://accounts.spotify.com/login/google/redirect") {
+                error("Unexpected code challenge for a synthetic Google code")
+            }
+            fail("A synthetic Google code must be refused")
+        } catch (failure: SpotifyFailure) {
+            android.util.Log.i("SpotifeurLogin5Test", "google refusal ${failure.javaClass.simpleName} status=${failure.status} \"${failure.message}\"")
+            assertEquals(failure.message, 401, failure.status)
+        }
+    }
 }

@@ -178,6 +178,7 @@ fun ConvertScreen(model: SpotifeurModel, navController: NavHostController, playl
 private fun ConversionContent(model: SpotifeurModel, navController: NavHostController, session: PlaylistConversion, inner: PaddingValues) {
     val state by session.state.collectAsState()
     val createFailed = stringResource(R.string.convert_failed)
+    val youTubeRefused = stringResource(R.string.youtube_refused)
     val createdMessage = stringResource(R.string.convert_done)
     var onlyReview by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf<Int?>(null) }
@@ -239,7 +240,11 @@ private fun ConversionContent(model: SpotifeurModel, navController: NavHostContr
                     onClick = {
                         session.create(
                             creator = { name, tracks -> model.createConverted(session.target, name, tracks) },
-                            failed = { failure -> failure.message?.takeIf(String::isNotBlank) ?: createFailed },
+                            failed = { failure ->
+                                val status = (failure as? fr.spotifeur.data.youtube.YouTubeFailure)?.status
+                                if (status == "403" || status == "429") youTubeRefused
+                                else failure.message?.takeIf(String::isNotBlank) ?: createFailed
+                            },
                         )
                     },
                     enabled = state.finished && state.tracks.isNotEmpty() && !state.creating && state.name.isNotBlank(),

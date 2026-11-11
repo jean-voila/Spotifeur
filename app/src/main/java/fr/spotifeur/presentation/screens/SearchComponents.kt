@@ -640,8 +640,20 @@ fun SearchResultHistoryList(
                             else -> R.string.search_history_kind_playlist
                         })
                         val detail = item.subtitle.takeIf { it.isNotBlank() && item.kind != MusicKind.Artist }
-                        Text(listOfNotNull(kind, detail).joinToString(" • "), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Where the result comes from, as in the result list. A multi-service playlist has no single source.
+                            val source = when {
+                                item.id.startsWith(fr.spotifeur.data.LOCAL_PLAYLIST_PREFIX) -> null
+                                item.id.startsWith(fr.spotifeur.data.youtube.YTM_PLAYLIST_PREFIX) -> fr.spotifeur.data.MusicSource.YouTubeMusic
+                                else -> fr.spotifeur.data.musicSourceOf(item.id)
+                            }
+                            if (source != null && fr.spotifeur.presentation.components.LocalSourceBadges.current) {
+                                fr.spotifeur.presentation.components.SourceBadge(source, Modifier.padding(end = 6.dp),
+                                    MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(listOfNotNull(kind, detail).joinToString(" • "), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     IconButton(onClick = { onDelete(item) }) {
                         Icon(Icons.Rounded.Close, stringResource(R.string.search_cd_delete_search_history_item),

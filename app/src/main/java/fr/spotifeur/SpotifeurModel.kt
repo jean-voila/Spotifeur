@@ -40,6 +40,8 @@ import fr.spotifeur.data.SpotifySearch
 import fr.spotifeur.data.SpotifySession
 import fr.spotifeur.data.SpotifyTransport
 import fr.spotifeur.data.youtube.YTM_PLAYLIST_PREFIX
+import fr.spotifeur.data.youtube.YTM_TRACK_PREFIX
+import fr.spotifeur.data.youtube.isYouTubeTrack
 import fr.spotifeur.data.youtube.YouTubeAccount
 import fr.spotifeur.data.youtube.YouTubeAccountInfo
 import fr.spotifeur.data.youtube.YouTubeAccountPlaylist
@@ -114,6 +116,12 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     private val preferences = app.getSharedPreferences("music_library", 0)
     private val savedIds = MutableStateFlow<Set<String>>(emptySet())
     val favorites = savedIds.asStateFlow()
+    /**
+     * YouTube Music tracks the user liked, newest first. Spotify's liked songs cannot hold them, so
+     * they are kept on the device and shown at the top of the liked songs; with a Google account they
+     * are also liked on YouTube Music.
+     */
+    private val youTubeLikes = MutableStateFlow(decodePins(preferences.getString(KEY_YOUTUBE_LIKES, null)))
 
     private val mutableDiscovery = MutableStateFlow(Discovery())
     val discovery = mutableDiscovery.asStateFlow()
@@ -127,7 +135,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     fun continueWithoutAccount() {
         preferences.edit { putBoolean(KEY_GUEST, true) }
         mutableGuest.value = true
-        if (remote == null) mutableLibrary.value = LibraryUi(emptyLibrary())
+        if (remote == null) installLibrary(emptyLibrary(), false)
         search(discovery.value.query)
     }
     /** Back to the sign-in screen, from the settings of a guest. */
@@ -456,7 +464,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     init {
-        if (mutableGuest.value) mutableLibrary.value = LibraryUi(emptyLibrary())
+        if (mutableGuest.value) installLibrary(emptyLibrary(), false)
         viewModelScope.launch {
             localPlaylistStore.playlists.collect { playlists ->
                 playlists.forEach { ui.register(it.asMusic()) }
@@ -515,6 +523,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleFavorite(item: Music) {
+        if (item.kind == MusicKind.Track && item.isYouTubeTrack) { toggleYouTubeLike(item); return }
         if (item.isLocalTrack || item.isLocalPlaylist || item.source != fr.spotifeur.data.MusicSource.Spotify || item.id.startsWith("ytm:")) return
         if (item.kind != MusicKind.Track && item.kind != MusicKind.Album && item.kind != MusicKind.Artist) {
             mutableMessage.value = "This item cannot be changed in your favorites."
@@ -527,6 +536,40 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try { sendFavorite(source, item, saved) } finally { pendingMutations.remove(item.id) }
         }
+    }
+
+    private fun toggleYouTubeLike(item: Music) {
+        val liked = youTubeLikes.value.none { it.id == item.id }
+        val next = if (liked) listOf(item.copy(mediaUri = null)) + youTubeLikes.value else youTubeLikes.value.filterNot { it.id == item.id }
+        youTubeLikes.value = next
+        preferences.edit { putString(KEY_YOUTUBE_LIKES, encodePins(next)) }
+        val current = mutableLibrary.value
+        if (current.content != null) installLibrary(current.content, current.loading)
+        else savedIds.update { if (liked) it + item.id else it - item.id }
+        val videoId = item.youTubeVideoId ?: return
+        if (!YouTubeAccount.signedIn || !online.value) return
+        viewModelScope.launch {
+            try { withContext(Dispatchers.IO) { YouTubeLibrary.like(videoId, liked) } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (auth: YouTubeAuthRequired) { youTubeAccountLost(auth) }
+            // The like stays on the device; YouTube Music gets it the next time it is changed.
+            catch (failure: IOException) {
+                fr.spotifeur.data.diagnostics.DiagnosticLog.record("youtube-library", "like ${failure.javaClass.simpleName} \"${failure.message}\"")
+            }
+        }
+    }
+
+    /** The liked songs with the YouTube Music likes on top, replacing those an earlier merge put there. */
+    private fun withYouTubeLikes(library: HomeLibrary): HomeLibrary {
+        val likes = youTubeLikes.value
+        val spotifyUris = library.savedTrackUris.filterNot { it.startsWith(YTM_TRACK_PREFIX) }
+        val removed = library.savedTrackUris.size - spotifyUris.size
+        return library.copy(
+            savedTracks = likes + library.savedTracks.filterNot { it.isYouTubeTrack },
+            savedTrackUris = likes.map(Music::id) + spotifyUris,
+            savedTrackCount = (library.savedTrackCount - removed).coerceAtLeast(0) + likes.size,
+            savedTracksLoaded = (library.savedTracksLoaded - removed).coerceAtLeast(0) + likes.size,
+        )
     }
 
     private fun changeFavorite(change: FavoriteChange) {
@@ -695,7 +738,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         // A read can predate a like: confirmed changes stay on top for as long as the service may lag.
         val now = System.currentTimeMillis()
         favoriteChanges.values.removeAll { it.confirmedAtMs != null && now - it.confirmedAtMs > FAVORITE_LAG_MS }
-        val visible = applyFavoriteChanges(merged, favoriteChanges.values).let { library ->
+        val visible = withYouTubeLikes(applyFavoriteChanges(merged, favoriteChanges.values)).let { library ->
             library.copy(playlists = library.playlists.map { playlist ->
                 val mosaic = playlistCovers[playlist.id]
                 when {
@@ -735,6 +778,12 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         if (item.id.startsWith(fr.spotifeur.data.youtube.YTM_ALBUM_PREFIX) || item.id.startsWith(fr.spotifeur.data.youtube.YTM_ARTIST_PREFIX)) {
             loadYouTubePage(item, refresh); return
         }
+        if (item.id == LIKED_SONGS && catalog == null) {
+            // Without a Spotify account the liked songs are the YouTube Music likes kept on the device.
+            val saved = mutableLibrary.value.content ?: return
+            mutableDetails.update { it + (item.id to DetailUi(CatalogDetail(item, saved.savedTracks, total = saved.savedTrackCount))) }
+            return
+        }
         val source = catalog ?: return
         val shown = mutableDetails.value[item.id]
         if (!more && !refresh && shown?.content != null && shown.error == null) return
@@ -760,7 +809,10 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
                 val age = withContext(Dispatchers.IO) { store.detailAgeMs(item.id) }
                 // An artist page stored by the library sync has no profile yet: read it once opened.
                 val incomplete = item.kind == MusicKind.Artist && previous.content.artist == null
-                if (!online.value || (age < revalidateAfterMs(item) && !incomplete)) {
+                // Opened by the user, an artist page shows current figures (monthly listeners): it is read again
+                // after an hour, while the background sync keeps its weekly pace.
+                val fresh = age < if (item.kind == MusicKind.Artist) ARTIST_OPEN_TTL_MS else revalidateAfterMs(item)
+                if (!online.value || (fresh && !incomplete)) {
                     mutableDetails.update { it + (item.id to DetailUi(previous.content)) }
                     return@launch
                 }
@@ -884,8 +936,8 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     internal suspend fun fullListeningHistory(): List<fr.spotifeur.data.HistoryEntry> {
         withContext(Dispatchers.IO) { listeningHistory.load() }
         val local = listeningHistory.entries.value
-        val source = catalog ?: return local
-        if (!online.value) return local
+        val source = catalog ?: return fr.spotifeur.data.collapseRepeats(local)
+        if (!online.value) return fr.spotifeur.data.collapseRepeats(local)
         val remote = runCatching {
             val plays = fr.spotifeur.data.spotifyRecentPlays(SpotifyAccount.require(app))
             val tracks = source.hydrate(plays.map { it.track }).associateBy(Music::id)
@@ -1115,6 +1167,12 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         connect { session -> session.connectEmail(email, loginFlowId) { requestCode(it, email) } }
     }
 
+    /** What Google returned for Spotify's client (code and ID token), read from the redirect before it loads. */
+    fun connectSpotifyGoogle(authCode: String?, idToken: String?, redirectUri: String) {
+        if (authCode.isNullOrBlank() && idToken.isNullOrBlank()) return
+        connect { session -> session.connectGoogle(authCode?.takeIf(String::isNotBlank), idToken?.takeIf(String::isNotBlank), redirectUri, ::requestCode) }
+    }
+
     private fun connect(authenticate: suspend (SpotifySession) -> Unit) {
         if (mutableAccount.value.working || remote != null) return
         accountJob = viewModelScope.launch {
@@ -1153,7 +1211,10 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         SpotifyAccount.attach(session)
         // A guest who signs in keeps the multi-service playlists; the library now comes from Spotify.
         if (mutableLibrary.value.content?.let { it.playlists.isEmpty() && it.savedTrackCount == 0 } == true) mutableLibrary.value = LibraryUi()
-        catalog = SpotifyCatalog(transport, session) { uri, from, length, fallback -> spotifyPlaylists.page(uri, from, length, fallback) }
+        catalog = SpotifyCatalog(transport, session,
+            nativePlaylist = { uri, from, length, fallback -> spotifyPlaylists.page(uri, from, length, fallback) },
+            nativeMetadata = { uris -> uris.chunked(40).fold(emptyMap()) { all, chunk -> all + spotifyPlaylists.entities(chunk) } },
+        )
         collections = SpotifyLibrary(transport, session, requireNotNull(catalog))
         radio = SpotifyRadio(transport, session)
         remote = SpotifySearch(transport, session)
@@ -1238,9 +1299,9 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { store.clear() }
         remote = null
         catalog = null; collections = null; radio = null; lyrics = null
-        mutableLibrary.value = if (mutableGuest.value) LibraryUi(emptyLibrary()) else LibraryUi()
         mutableDetails.value = emptyMap()
         savedIds.value = emptySet(); mutableRecent.value = emptyList()
+        if (mutableGuest.value) installLibrary(emptyLibrary(), false) else mutableLibrary.value = LibraryUi()
         mutableAccount.value = AccountUi()
         mutableDiscovery.update { it.copy(spotifyEnabled = false) }
         search(discovery.value.query)
@@ -1360,7 +1421,8 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
             search = conversionSearch(target),
             // A device file can stay in a Spotify playlist as Spotify's own local file reference.
             fallback = { track -> track.takeIf { target == fr.spotifeur.data.PlaylistKind.Spotify && it.id.startsWith(fr.spotifeur.data.LOCAL_TRACK_PREFIX) } },
-            parallelism = if (target == fr.spotifeur.data.PlaylistKind.Spotify) 2 else 3,
+            parallelism = if (target == fr.spotifeur.data.PlaylistKind.Spotify) 2 else 4,
+            cooldownMs = { if (target == fr.spotifeur.data.PlaylistKind.Spotify) 0L else fr.spotifeur.data.youtube.YouTubeMusic.cooldownMs() },
         )
         mutableConversion.value = conversion
         conversion.start()
@@ -1481,6 +1543,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         const val TRACKS_FILES = "files"
         private const val KEY_GUEST = "guest"
         private const val KEY_PENDING_LIKES = "pending_likes"
+        private const val KEY_YOUTUBE_LIKES = "youtube_likes"
         private const val KEY_PLAYLIST_COVERS = "playlist_covers"
         private const val KEY_PENDING_UNLIKES = "pending_unlikes"
         private const val KEY_YOUTUBE_PLAYLISTS = "youtube_playlists"
@@ -1489,6 +1552,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         private const val LIBRARY_TTL_MS = 10 * 60 * 1000L
         private const val PLAYLIST_TTL_MS = 12 * 60 * 60 * 1000L
         private const val ARTIST_TTL_MS = 7 * 24 * 60 * 60 * 1000L
+        private const val ARTIST_OPEN_TTL_MS = 60 * 60 * 1000L
         private const val ALBUM_TTL_MS = 30 * 24 * 60 * 60 * 1000L
         /** Large libraries are read in the background for offline use; Spotify answers 429 to bursts. */
         private const val BACKGROUND_REQUEST_GAP_MS = 1_000L

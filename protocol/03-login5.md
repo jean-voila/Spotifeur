@@ -64,6 +64,16 @@ Static: `p.fg8.b` (`classes.dex`) turns `p.ig8` into `EsAuthenticateCredentials.
 
 **Live:** this flow returned `LoginOk`, and the stored credential restored the session after the app was force-stopped. It needs no password and changes nothing on the account. Android autofill should be cancelled for the code field so the code is not offered as a password.
 
+### Google (v4 and v3, field 108)
+
+Static: Orbit names `spotify.login5.v3.credentials.GoogleSignInCredential` (1 `auth_code`, 2 `redirect_uri`) and the v4 message of the same name, whose mini-table lists three string fields in the order `auth_code`, `redirect_uri`, `id_token` (fields 1, 2, 3). librespot's v3 schema places it at `LoginRequest` field 108. In `classes.dex`, `p.fg8.b` builds `EsAuthenticateCredentials.GoogleSignInCredentials` in two ways: an auth code with an optional redirect address (`p.n450`, Google Sign-In), or an ID token alone (`p.o450`, Credential Manager, behind `enable_credential_manager_google_sign_in`). The Google client is `1046568431490-ij1gi5shcp2gtorls09frkc56d4mjbe2.apps.googleusercontent.com` (`serverClientId`, `classes4.dex`), the same one `accounts.spotify.com/login/google` sends to Google with `redirect_uri=https://accounts.spotify.com/login/google/redirect`.
+
+Without Google Play services, Spotifeur opens Google's authorization page for that client and that redirect address with `response_type=code id_token`, a `state` and a `nonce`. Google answers with both in the fragment of the redirect, which the WebView stops before it loads. The ID token is sent alone first (v4, field 3), then the code with the redirect address (fields 1 and 2), each with its own `flow_id`.
+
+Errors seen: 1 (`INVALID_CREDENTIALS`) for a made-up code or token, 5 (`UNKNOWN_IDENTIFIER`) for a real Google account that is not linked to a Spotify account.
+
+**Live, 2026-11-11:** v4 field 108 with a made-up code, and with a made-up ID token in field 3, answered error 1, not HTTP 400: the server takes both as credentials. Google's page opened in the WebView once its user agent no longer announced a WebView, and accepted `response_type=code id_token` for this client. A real Google account no longer linked to its Spotify account got error 5 with the code. A sign-in with a linked account was not run.
+
 ### Password (v4 and v3, field 101)
 
 Static: `p.fg8.b` builds `EsAuthenticateCredentials.LegacyV3Password` from `p.lg8` (constructor at `0x32cbb6`) and, in a separate branch, a `NativePassword` message (`0x32cc06`). Both exist in this build. Orbit names `spotify.login5.v4.credentials.NativePassword` with 1 `id` and 2 `password`.

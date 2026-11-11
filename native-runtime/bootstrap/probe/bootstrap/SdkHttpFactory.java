@@ -32,6 +32,23 @@ public final class SdkHttpFactory implements HttpConnectionFactory, AutoCloseabl
         } catch(RuntimeException failure){out.append("truncated");}
         return out.toString().trim();
     }
+    /** Field 1 of a request body (the request header of a batched metadata request), or null. */
+    private static byte[] headerField(byte[] body) {
+        if(body==null)return null;
+        int i=0;
+        try {
+            while(i<body.length) {
+                long tag=0;int shift=0;byte b;do{b=body[i++];tag|=(long)(b&0x7f)<<shift;shift+=7;}while((b&0x80)!=0);
+                int field=(int)(tag>>>3),type=(int)(tag&7);
+                if(type==0){do{b=body[i++];}while((b&0x80)!=0);continue;}
+                if(type!=2)return null;
+                long n=0;shift=0;do{b=body[i++];n|=(long)(b&0x7f)<<shift;shift+=7;}while((b&0x80)!=0);
+                if(field==1)return Arrays.copyOfRange(body,i,i+(int)n);
+                i+=(int)n;
+            }
+        } catch(RuntimeException failure){return null;}
+        return null;
+    }
     private final java.util.function.BiFunction<String,Boolean,Map<String,String>> apiHeaders;
     private final java.util.function.Function<String,byte[]> keyLoad;
     private final java.util.function.BiConsumer<String,byte[]> keySave;
@@ -168,6 +185,7 @@ public final class SdkHttpFactory implements HttpConnectionFactory, AutoCloseabl
                                 nextMediaRequestNanos=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(500);
                             }
                         }
+                        if(url.getPath().contains("extended-metadata"))android.util.Log.i("SpotifeurNativeHttp","metadata route="+url.getHost()+url.getPath()+" body="+shape(body)+" header="+shape(headerField(body)));
                         HttpURLConnection connection=(HttpURLConnection)url.openConnection(); socket=connection;
                         connection.setInstanceFollowRedirects(false); connection.setUseCaches(false);
                         connection.setConnectTimeout(millis(options.getConnectTimeout())); connection.setReadTimeout(millis(options.getTimeout()));

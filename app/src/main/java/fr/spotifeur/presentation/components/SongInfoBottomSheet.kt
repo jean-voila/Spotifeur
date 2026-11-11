@@ -162,7 +162,8 @@ fun SongInfoBottomSheet(
             Row1Actions(
                 isFavorite = isFavorite,
                 onPlaySong = { onPlaySong(); onDismiss() },
-                onToggleFavorite = if (spotifyPages) onToggleFavorite else null,
+                // YouTube Music tracks are liked on the device (and on the Google account when there is one).
+                onToggleFavorite = if (spotifyPages || song.source == fr.spotifeur.data.MusicSource.YouTubeMusic) onToggleFavorite else null,
                 onShareClick = if (song.isLocal) null else ({ context.shareMusic(song.toMusic()) }),
                 playButtonShape = OptionsPlayButtonShape,
                 evenCornerRadiusElems = 26.dp

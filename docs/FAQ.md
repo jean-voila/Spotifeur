@@ -26,7 +26,7 @@ No. The engine is ARM64 only.
 
 ## How do I sign in?
 
-Enter the email address of your Spotify account, then the code Spotify emails you. Signing in with a password is also available. The session is kept encrypted on the device and restored at each launch. Settings → Spotify account → Sign out erases it.
+Enter the email address of your Spotify account, then the code Spotify emails you. If your Spotify account is linked to Google, "Sign in with Google" opens Google's page instead. Signing in with a password is also available. The session is kept encrypted on the device and restored at each launch. Settings → Spotify account → Sign out erases it.
 
 ## Why no podcasts, audiobooks, videos or Canvas?
 

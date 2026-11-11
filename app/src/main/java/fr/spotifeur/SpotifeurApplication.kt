@@ -11,6 +11,8 @@ class SpotifeurApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         fr.spotifeur.data.diagnostics.DiagnosticLog.init(this)
+        fr.spotifeur.data.diagnostics.DiagnosticLog.catchCrashes()
+        fr.spotifeur.data.diagnostics.DiagnosticLog.recordPastExits(this)
         NetworkMonitor.start(this)
         fr.spotifeur.data.youtube.YouTubeMusic.init(this)
         fr.spotifeur.data.youtube.TrackMatcher.init(this)

@@ -39,6 +39,8 @@ class ListeningHistoryStore(context: Context) {
 
     @Synchronized fun record(track: Music, at: Long = System.currentTimeMillis()) {
         load()
+        // The same listening seen again (queue rebuilt, shuffle, app restarted while playing) is not a new play.
+        mutable.value.firstOrNull()?.let { newest -> if (isSameListening(newest, track.id, at)) return }
         val entry = HistoryEntry(track.copy(mediaUri = if (track.source == MusicSource.Local) track.mediaUri else null), at)
         mutable.value = (listOf(entry) + mutable.value).take(LIMIT)
         runCatching { java.io.FileOutputStream(file, true).use { it.write((encodeEntry(entry) + "\n").toByteArray()) } }
@@ -112,5 +114,30 @@ internal fun decodeRecentPlays(json: String): List<SpotifyRecentPlay> {
  */
 internal fun mergeHistory(local: List<HistoryEntry>, spotify: List<HistoryEntry>, window: Long = 15 * 60_000L): List<HistoryEntry> {
     val kept = spotify.filter { remote -> local.none { it.track.id == remote.track.id && kotlin.math.abs(it.playedAt - remote.playedAt) < window } }
-    return (local + kept).sortedByDescending(HistoryEntry::playedAt)
+    return collapseRepeats((local + kept).sortedByDescending(HistoryEntry::playedAt))
 }
+
+/**
+ * Whether a play of [trackId] starting at [at] is the [newest] entry seen again: same track, started
+ * before the newest one could have finished. A track played again after it ended is a new play.
+ */
+internal fun isSameListening(newest: HistoryEntry, trackId: String, at: Long): Boolean {
+    if (newest.track.id != trackId) return false
+    val length = newest.track.durationMs.takeIf { it > 0 }?.toLong() ?: DEFAULT_TRACK_MS
+    return at - newest.playedAt in 0 until maxOf(length * 9 / 10, MIN_REPLAY_MS)
+}
+
+/** Entries, newest first, without the repeats of one listening that earlier versions stored twice. */
+internal fun collapseRepeats(entries: List<HistoryEntry>): List<HistoryEntry> {
+    val kept = ArrayList<HistoryEntry>(entries.size)
+    // Walk oldest first, so the first time a listening was seen is the one kept.
+    for (entry in entries.asReversed()) {
+        val previous = kept.lastOrNull()
+        if (previous != null && isSameListening(previous, entry.track.id, entry.playedAt)) continue
+        kept += entry
+    }
+    return kept.asReversed()
+}
+
+private const val DEFAULT_TRACK_MS = 3 * 60_000L
+private const val MIN_REPLAY_MS = 30_000L

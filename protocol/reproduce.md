@@ -80,6 +80,7 @@ To find a descriptor, search for its file name prefixed by a length byte, for ex
 | `extended_metadata.proto` | `[0x66df3c, 0x66e52d)` |
 | `audio_files_extension.proto` | `[0x67064c, 0x670934)` |
 | `metadata.proto` | `[0x6713c0, 0x6737f4)` |
+| `metadata_esperanto.proto` | starts at `0x5b48c0` (search `\n\x18metadata_esperanto.proto`) |
 
 ## Runtime measurements
 
@@ -114,3 +115,13 @@ adb shell cat /proc/net/dev
 ```
 
 Perfetto with the `android.network_packets` data source gives per-UID packet timing; see the [Perfetto docs](https://perfetto.dev/docs/analysis/stdlib-docs#android.network_packets).
+
+Read-only checks added with the native metadata fallback and the Google credential:
+
+```sh
+T() { adb shell am instrument -w -r "$@" fr.spotifeur.test/androidx.test.runner.AndroidJUnitRunner; }
+T -e spotifyNetwork true -e class fr.spotifeur.data.NativeMetadataProbeTest,fr.spotifeur.data.Login5NetworkTest
+T -e spotifyArtist true -e artistQuery Wailtoad -e class fr.spotifeur.data.SpotifyArtistProbeTest
+T -e youtubeAccount true -e class fr.spotifeur.data.YouTubeAccountProbeTest
+```
+

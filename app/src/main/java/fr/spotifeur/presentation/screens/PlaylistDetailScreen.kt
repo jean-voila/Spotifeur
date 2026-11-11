@@ -285,7 +285,7 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
                                 onMoreOptionsClick = { selected = it; selectedIndex = index },
                                 onLongPress = { selected = song; selectedIndex = index },
                                 onClick = { ui.playSongs(songs, song, current.title) },
-                                showSourceBadge = isLocalList,
+                                showSourceBadge = isLocalList || isLiked,
                                 onSwipeRemove = removeAt?.let { remove -> { remove(index) } },
                                 swipeEnabled = !reordering,
                             )

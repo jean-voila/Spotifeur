@@ -232,6 +232,12 @@ internal class SpotifyPlaylists(private val context: Context) : AutoCloseable {
         if (status !in 200..299) throw SpotifyFailure("Spotify playlist: native read refused (code $status).", status)
         return decodeNativePlaylistPage(response, fallback, from)
     }
+    /**
+     * Track, album and artist metadata through the native core (`ClassicMetadataService/MultigetEntity`),
+     * as the official app's pages read it. Used when Extended Metadata over HTTP refuses the entities.
+     */
+    suspend fun entities(uris: List<String>): Map<String, ByteArray> =
+        decodeNativeMetadata(request(CLASSIC_METADATA_SERVICE, "MultigetEntity", nativeMetadataRequest(uris)), uris)
     suspend fun isOwned(uri: String): Boolean = metadata(uri).number(4) == 1
     suspend fun published(uri: String): Boolean = rootEntry(uri)?.second ?: false
     suspend fun recommendations(uri: String, tracks: List<Music>, fallback: List<Music>): List<Music> {

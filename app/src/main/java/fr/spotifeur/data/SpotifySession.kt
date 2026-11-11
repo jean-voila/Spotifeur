@@ -111,6 +111,11 @@ internal class SpotifySession(
         save(login.email(client, email, flowId, code), null)
     }
 
+    suspend fun connectGoogle(authCode: String?, idToken: String?, redirectUri: String, code: suspend (Int) -> String) = lock.withLock {
+        val client = client().forHost("login5.spotify.com")
+        save(login.google(client, authCode, idToken, redirectUri, code), null)
+    }
+
     /** Reopens the saved account without any request: tokens renew when a request first needs them. */
     suspend fun restore(credential: StoredCredential) = lock.withLock {
         audioBandwidth = null

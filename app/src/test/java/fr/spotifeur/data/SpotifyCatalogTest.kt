@@ -89,5 +89,23 @@ class SpotifyCatalogTest {
         assertFalse(spotifyArtwork("http://i.scdn.co/image/a") != null)
     }
 
+    @Test
+    fun nativeMetadataKeepsRequestedUrisAndSkipsErrors() {
+        val track = proto { writeByteArray(1, gid(1)); writeString(2, "One More Time") }
+        val album = proto { writeByteArray(1, gid(2)); writeString(2, "Discovery") }
+        val requested = listOf(gidUri("track", gid(9))!!, gidUri("album", gid(2))!!, gidUri("track", gid(3))!!)
+        val response = Proto(proto {
+            // A relinked track comes back with another gid: it is kept under the URI that was asked for.
+            writeByteArray(1, proto { writeByteArray(4, track) })
+            writeByteArray(1, proto { writeByteArray(3, album) })
+            writeByteArray(1, proto { writeSInt32(1, 404) })
+        })
+        val decoded = decodeNativeMetadata(response, requested)
+        assertEquals(setOf(requested[0], requested[1]), decoded.keys)
+        assertEquals("One More Time", decodeMetadataTrack(Proto(decoded.getValue(requested[0])))?.title)
+        assertEquals(listOf("spotify:track:x", "spotify:album:y").joinToString(), nativeMetadataRequest(listOf("spotify:track:x", "spotify:album:y"))
+            .let { bytes -> Proto(bytes).texts(1).joinToString() })
+    }
+
     private fun gid(number: Int) = ByteArray(16).also { it[15] = number.toByte() }
 }

@@ -500,7 +500,7 @@ private fun ArtistAlbumSectionSongItem(
                 song = song,
                 isCurrentSong = isCurrentSong,
                 isPlaying = isPlaying,
-                showAlbumArt = false,
+                showAlbumArt = true,
                 customShape = songItemShape,
                 supportingText = supportingText,
                 onMoreOptionsClick = { onMoreOptionsClick() },
