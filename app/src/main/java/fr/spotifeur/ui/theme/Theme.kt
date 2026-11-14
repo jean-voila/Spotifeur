@@ -117,7 +117,7 @@ fun SpotifeurTheme(
         colorSchemePairOverride == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             // Tema dinámico del sistema como prioridad si no hay override
             try {
-                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                if (darkTheme) dynamicDarkColorScheme(context).vividAccents() else dynamicLightColorScheme(context)
             } catch (e: Exception) {
                 // Fallback a los defaults si dynamic colors falla (raro, pero posible en algunos dispositivos)
                 if (darkTheme) DarkColorScheme else LightColorScheme

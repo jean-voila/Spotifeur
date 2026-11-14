@@ -677,6 +677,8 @@ private fun CustomCollapsingTopBar(
                 // Botón de Play
                 LargeExtendedFloatingActionButton(
                     onClick = onPlayClick,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = DetailFabShape,
                     // Shadows of concave outlines are re-tessellated by the renderer on every
                     // frame: with this 360-point star it saturates it and freezes the UI.

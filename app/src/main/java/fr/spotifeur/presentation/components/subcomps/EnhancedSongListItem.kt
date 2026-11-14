@@ -171,16 +171,17 @@ fun EnhancedSongListItem(
 
     val colors = MaterialTheme.colorScheme
     val baseContainerColor = containerColorOverride ?: colors.surfaceContainerLow
-    val playbackContainerColor = lerpColor(baseContainerColor, colors.primaryContainer, highlightProgress)
+    // The playing row is the accent itself, light on a dark page and dark on a light one.
+    val playbackContainerColor = lerpColor(baseContainerColor, colors.primary, highlightProgress)
     val containerColor = lerpColor(playbackContainerColor, colors.secondaryContainer, selectionVisualProgress)
 
     val baseContentColor = colors.onSurface
-    val playbackContentColor = lerpColor(baseContentColor, colors.onPrimaryContainer, highlightProgress)
+    val playbackContentColor = lerpColor(baseContentColor, colors.onPrimary, highlightProgress)
     val contentColor = lerpColor(playbackContentColor, colors.onSecondaryContainer, selectionVisualProgress)
 
     val selectionBorderColor = lerpColor(colors.primary.copy(alpha = 0f), colors.primary, selectionVisualProgress)
-    val mvContainerColor = lerpColor(colors.onSurface, colors.primaryContainer, highlightProgress)
-    val mvContentColor = lerpColor(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress)
+    val mvContainerColor = lerpColor(colors.onSurface, colors.primary, highlightProgress)
+    val mvContentColor = lerpColor(colors.surfaceContainerHigh, colors.onPrimary, highlightProgress)
     val selectionOverlayColor = lerpColor(
         Color.Transparent,
         colors.primary.copy(alpha = 0.7f),

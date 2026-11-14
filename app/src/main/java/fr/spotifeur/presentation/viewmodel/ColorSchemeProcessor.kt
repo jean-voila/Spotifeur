@@ -278,6 +278,6 @@ class ColorSchemeProcessor(private val context: Context) {
     companion object {
         private const val TAG = "ColorSchemeProcessor"
         private const val CACHE_KEY_SEPARATOR = "|"
-        private const val CACHE_ALGORITHM_VERSION = "algo_v7"
+        private const val CACHE_ALGORITHM_VERSION = "algo_v8"
     }
 }

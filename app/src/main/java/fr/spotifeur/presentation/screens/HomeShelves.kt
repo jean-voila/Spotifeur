@@ -33,7 +33,10 @@ import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.unit.sp
 import fr.spotifeur.ui.theme.GoogleSansRounded
@@ -58,18 +61,34 @@ private fun Cover(item: Music, ui: PlayerViewModel, placeholder: Color, shape: a
     }
 }
 
-/** The cover itself, blurred and slightly darkened: the card's background continues the artwork. */
+/** Saturated then darkened: the blurred cover keeps its colours but never reads as a pale wash. */
+private val BlurredCoverFilter = ColorFilter.colorMatrix(
+    ColorMatrix().apply {
+        setToSaturation(1.5f)
+        timesAssign(ColorMatrix().apply { setToScale(0.45f, 0.45f, 0.45f, 1f) })
+    }
+)
+
+/** Darker towards the bottom, where the texts are. */
+private val BlurredCoverVeil = Brush.verticalGradient(
+    0f to Color.Black.copy(alpha = 0.1f),
+    1f to Color.Black.copy(alpha = 0.5f),
+)
+
+/** The cover itself, blurred, saturated and darkened: the card's background continues the artwork. */
 @Composable
-private fun BoxScope.BlurredCover(item: Music) {
+internal fun BoxScope.BlurredCover(imageUrl: String?) {
     val blurAvailable = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-    if (item.imageUrl != null) SmartImage(
-        model = item.imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
+    if (imageUrl != null) SmartImage(
+        model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
         targetSize = coil.size.Size(160, 160),
+        colorFilter = BlurredCoverFilter,
         // Enlarged so the blur's faded rim falls outside the card and only the full colour shows.
         modifier = Modifier.matchParentSize().graphicsLayer { scaleX = 1.6f; scaleY = 1.6f }.blur(40.dp, BlurredEdgeTreatment.Unbounded),
     ) else Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.surfaceContainerHighest))
+    Box(Modifier.matchParentSize().background(BlurredCoverVeil))
     // Without blur (Android 11 and older) the plain picture needs a stronger veil under the text.
-    Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = if (blurAvailable) 0.22f else 0.5f)))
+    if (!blurAvailable) Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.3f)))
 }
 
 private val CardTitleShadow = Shadow(Color.Black.copy(alpha = 0.35f), blurRadius = 8f)
@@ -99,7 +118,7 @@ internal fun ShelfCoverCard(item: Music, ui: PlayerViewModel, modifier: Modifier
     val round = item.kind == MusicKind.Artist
     val shape = RoundedCornerShape(30.dp)
     Box(modifier.clip(shape).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
-        BlurredCover(item)
+        BlurredCover(item.imageUrl)
         Column(Modifier.padding(7.dp)) {
             Cover(item, ui, MaterialTheme.colorScheme.surfaceContainerHighest, if (round) CircleShape else RoundedCornerShape(23.dp),
                 Modifier.fillMaxWidth().aspectRatio(1f))
@@ -114,7 +133,7 @@ internal fun ShelfCoverCard(item: Music, ui: PlayerViewModel, modifier: Modifier
 internal fun ShelfListRow(item: Music, ui: PlayerViewModel, onClick: () -> Unit, onLongClick: () -> Unit) {
     val shape = RoundedCornerShape(26.dp)
     Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp).clip(shape).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
-        BlurredCover(item)
+        BlurredCover(item.imageUrl)
         Row(Modifier.padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Cover(item, ui, MaterialTheme.colorScheme.surfaceContainerHighest,
                 if (item.kind == MusicKind.Artist) CircleShape else RoundedCornerShape(19.dp), Modifier.size(58.dp))

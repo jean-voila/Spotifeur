@@ -469,43 +469,53 @@ private fun LikedSongsCard(
     onPlay: () -> Unit,
 ) {
     val shape = RoundedCornerShape(30.dp)
-    Surface(
-        modifier = Modifier
+    // Same treatment as the shelf cards: the latest liked cover, blurred, behind white text.
+    Box(
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
             .clip(shape)
-            .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = shape,
+            .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
     ) {
+        BlurredCover(artworks.firstOrNull())
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(72.dp).clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
             ) {
-                if (artworks.isNotEmpty()) SmartImage(
-                    model = artworks.first(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+                if (artworks.isNotEmpty()) {
+                    SmartImage(
+                        model = artworks.first(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+                }
+                Icon(
+                    Icons.Rounded.Favorite, null, Modifier.size(32.dp),
+                    tint = if (artworks.isNotEmpty()) Color.White else MaterialTheme.colorScheme.onPrimary,
                 )
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)))
-                Icon(Icons.Rounded.Favorite, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onPrimary)
             }
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                Text(stringResource(R.string.liked_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(R.string.liked_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
                 Text(
                     formatSongCount(count),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.82f),
                 )
             }
             FilledIconButton(
                 onClick = onPlay,
                 modifier = Modifier.size(52.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    contentColor = MaterialTheme.colorScheme.primaryContainer,
+                    containerColor = Color.White,
+                    contentColor = Color.Black,
                 ),
             ) {
                 Icon(Icons.Rounded.PlayArrow, stringResource(R.string.liked_play), Modifier.size(30.dp))

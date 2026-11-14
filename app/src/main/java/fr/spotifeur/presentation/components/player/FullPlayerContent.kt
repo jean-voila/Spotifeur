@@ -305,10 +305,6 @@ fun FullPlayerContent(
     val playerOnAccentColor = LocalMaterialTheme.current.onPrimary
     val transportPlayPauseColors = expressivePlayPauseButtonColors(LocalMaterialTheme.current)
     val transportSkipColors = expressiveSkipButtonColors(LocalMaterialTheme.current)
-    val transportSkipButtonColors = TransportButtonColors(
-        container = playerAccentColor,
-        content = playerOnAccentColor
-    )
     val progressActiveColor = playerOnBaseColor
 
     val placeholderColor = playerOnBaseColor.copy(alpha = 0.1f)
@@ -482,7 +478,7 @@ fun FullPlayerContent(
             onPlayPause = onPlayPause,
             onNext = onNextWithOptimisticCarousel,
             transportPlayPauseColors = transportPlayPauseColors,
-            transportSkipColors = transportSkipButtonColors,
+            transportSkipColors = transportSkipColors,
             isShuffleEnabledProvider = isShuffleEnabledProvider,
             shuffleTransitionInProgress = shuffleTransitionInProgress,
             repeatModeProvider = repeatModeProvider,

@@ -34,8 +34,12 @@ internal data class SheetThemeState(
     val isPreparingPlayback: Boolean,
     val miniReadyAlpha: Float,
     val miniAppearScale: Float,
-    val playerAreaBackground: Color
+    val playerAreaBackground: Color,
+    /** Top of the player's gradient, behind the cover: the background lit by the accent. */
+    val playerAreaGlow: Color
 )
+
+private const val PLAYER_GLOW_FRACTION = 0.14f
 
 internal fun resolvePlayerSheetTargetScheme(
     isAlbumArtTheme: Boolean,
@@ -150,6 +154,7 @@ internal fun rememberSheetThemeState(
     val miniReadyAlpha = miniAppearProgress.value
     val miniAppearScale = lerp(0.985f, 1f, miniAppearProgress.value)
     val playerAreaBackground = miniPlayerScheme.primaryContainer
+    val playerAreaGlow = lerp(playerAreaBackground, miniPlayerScheme.primary, PLAYER_GLOW_FRACTION)
 
     // NOTE: miniAlpha and effectivePlayerAreaElevation are no longer computed here.
     // They were driven by the expansion fraction via the Transition API, which
@@ -166,7 +171,8 @@ internal fun rememberSheetThemeState(
         isPreparingPlayback = isPreparingPlayback,
         miniReadyAlpha = miniReadyAlpha,
         miniAppearScale = miniAppearScale,
-        playerAreaBackground = playerAreaBackground
+        playerAreaBackground = playerAreaBackground,
+        playerAreaGlow = playerAreaGlow
     )
 }
 

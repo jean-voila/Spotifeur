@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -480,6 +481,17 @@ fun UnifiedPlayerSheetV2(
     val miniReadyAlpha = sheetThemeState.miniReadyAlpha
     val miniAppearScale = sheetThemeState.miniAppearScale
     val playerAreaBackground = sheetThemeState.playerAreaBackground
+    val playerAreaGlow = sheetThemeState.playerAreaGlow
+    // Lit at the top behind the cover, the plain background from the title down. Measured in
+    // pixels from the card's top so the mini player shows the top of the same gradient.
+    val playerAreaGlowEndPx = with(density) { (containerHeight * 0.5f).toPx() }
+    val playerAreaBrush = remember(playerAreaGlow, playerAreaBackground, playerAreaGlowEndPx) {
+        Brush.verticalGradient(
+            colors = listOf(playerAreaGlow, playerAreaBackground),
+            startY = 0f,
+            endY = playerAreaGlowEndPx
+        )
+    }
     // Elevation is only visible in the mini/collapsed state (expansion < 0.18).
     // miniReadyAlpha fades the shadow in during the initial song-appear animation.
     val isDragging = sheetBackAndDragState.isDragging
@@ -619,7 +631,7 @@ fun UnifiedPlayerSheetV2(
                                 clip = false
                             )
                             .background(
-                                color = playerAreaBackground,
+                                brush = playerAreaBrush,
                                 shape = sheetInteractionState.playerShadowShape
                             )
                             .clip(sheetInteractionState.playerShadowShape)
