@@ -96,9 +96,39 @@ adb shell am instrument -w -r -e spotifyAudioStress true -e spotifyAccountType f
   fr.spotifeur.freecheck.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
+Add `-e spotifyOfflineEntitlement false` to require an actual account without offline access.
+The assertion reads the value from Spotify before the player starts.
+
+To verify how the app handles the processor refusal observed on 2026-11-25, use this test on the Free account:
+
+```sh
+adb shell am instrument -w -r -e spotifyRefusalDiagnostic true \
+  -e spotifyTrackUris spotify:track:0ofHAoxe9vBkTCp2UQIavz \
+  -e class 'fr.spotifeur.playback.NativePlaybackSignalTest#standardQualityRefusalStopsAutomaticRetry' \
+  fr.spotifeur.freecheck.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+It checks the clear lead-in signal, the refusal delivered to the app's player, and that the intro stays stopped.
+
+The refusal test turns Skibidisong mode off while it runs and restores the setting afterwards.
+
+On the same restricted account, Skibidisong mode (YouTube Music recordings matched against the
+Spotify clear lead-in) is measured by:
+
+```sh
+adb shell am instrument -w -r -e skibidisong true \
+  -e class fr.spotifeur.playback.SkibidisongSignalTest \
+  fr.spotifeur.freecheck.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+It checks PCM 20 s into a track, after three seeks, across an automatic transition, after a refusal
+at the encrypted boundary, and from a download without network. `-e skibidisongSurvey 15` reads again
+15 tracks kept without an audio match and logs every comparison (tag `Skibidisong`).
+
 `-e spotifyAttributeOverrides 'offline=false;ads=true'` (quoted for the device shell)
-replaces attributes in the engine session only, to reproduce another plan's entitlements;
-`offline` is then forced back to `true` as in the app.
+replaces attributes in the engine session only. The request to Spotify still uses the signed-in
+account and its original server-side permissions. Run this experiment separately from the
+account entitlement assertion.
 
 These tests measure decoded PCM after the clear lead-in and seeks; the first also
 checks an automatic track transition. The quality test expects the requested level

@@ -4,7 +4,7 @@ This folder documents how the official Spotify Android client talks to Spotify's
 
 ## Scope
 
-All observations refer to one build of the official app:
+Unless a section gives a different version, class names, offsets and measurements refer to this build of the official app:
 
 | Item | Value |
 | --- | --- |
@@ -16,6 +16,17 @@ All observations refer to one build of the official app:
 | Orbit build ID | `a80ecaa87cb98759` |
 
 Obfuscated class names (`p.xxxx`) and code offsets are specific to this build. Service paths, Protobuf field numbers and enum values tend to be more stable, but every update can change them.
+
+The current Spotifeur runtime input comes from the following build:
+
+| Item | Value |
+| --- | --- |
+| Package | `com.spotify.music` |
+| Version | 9.2.4.2135 |
+| Version code | 148912737 |
+| `base.apk` SHA-256 | `97db061e215bbf5cb1b7f2ee2a6042ce37a41024e5e0339bb9bff1271917b842` |
+| `lib/arm64-v8a/liborbit-jni-spotify.so` SHA-256 | `25911630321ee57f033a1191291becbd84a7f266224c2fbb522b3cf1a8659f65` |
+| Orbit build ID | `13c44aff331d9c7d` |
 
 ## Contents
 

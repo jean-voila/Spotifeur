@@ -194,7 +194,7 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
     )
     val settingsStore = SettingsStore.get(context)
     val settings: StateFlow<AppSettings> = settingsStore.settings
-    fun updateSettings(change: (AppSettings) -> AppSettings) = settingsStore.update(change)
+    fun updateSettings(change: (AppSettings) -> AppSettings) = settingsStore.update(change = change)
     val playerConfigSlice: StateFlow<PlayerConfigSlice> = settings.map { s ->
         PlayerConfigSlice(
             navBarCornerRadius = s.navBarCornerRadius,
@@ -726,6 +726,15 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
     private val mutableToasts = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val toastEvents: SharedFlow<String> = mutableToasts.asSharedFlow()
     fun sendToast(message: String) { mutableToasts.tryEmit(message) }
+
+    init {
+        scope.launch {
+            model.player.state.map { state -> state.track?.id?.takeIf { state.spotifyPlaybackRefused } }
+                .distinctUntilChanged().collect { trackId ->
+                    if (trackId != null) sendToast(context.getString(R.string.spotify_playback_refused))
+                }
+        }
+    }
 
     companion object {
         private const val KEY_HISTORY = "search_history"

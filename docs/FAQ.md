@@ -2,7 +2,7 @@
 
 ## Do I need a Spotify account?
 
-No. Without an account, Spotifeur plays the YouTube Music catalog and the audio files on your phone, and Spotify tracks of imported playlists play from their closest YouTube Music match. With an account, it shows your Spotify library and plays what your account is allowed to play. Free and Premium accounts have been tested, including playlists and offline playback. Free accounts play AAC 128 kbit/s; Premium also plays AAC 256 kbit/s. If something fails with your account, Settings → Diagnostic report gives a text to attach to a bug report.
+No. Without an account, Spotifeur plays the YouTube Music catalog and the audio files on your phone, and Spotify tracks of imported playlists play from their closest YouTube Music match. With an account, it shows your Spotify library and uses the quality Spotify grants. On the tested Free account, Spotify playback stopped after about ten seconds once introductory offline access ended. On such an account, Skibidisong mode (on by default, Settings → Playback) plays each Spotify track from its YouTube Music recording, chosen by comparing the start of both recordings, and downloads keep that recording. Settings → Diagnostic report can capture account and playback details for a bug report.
 
 ## Do I need the official Spotify app installed?
 
@@ -18,7 +18,7 @@ Spotifeur checks GitHub at startup. A newer release opens a dialog with release 
 
 ## Which Spotify version is needed?
 
-Exactly 9.2.0.26 (build 148373686), ARM64. The build checks the SHA-256 of the extracted files and stops if they differ.
+Exactly 9.2.4.2135 (build 148912737), ARM64. The build checks the SHA-256 of the extracted files and stops if they differ.
 
 ## Does it work on x86 emulators or 32-bit phones?
 

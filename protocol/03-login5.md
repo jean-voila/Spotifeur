@@ -56,13 +56,15 @@ The descriptors also contain `Finish.nonce`, `Redirect.interaction_url` and `Int
 
 Static: `p.fg8.b` (`classes.dex`) turns `p.ig8` into `EsAuthenticateCredentials.EmailAddress`. In Orbit, `LoginRequest` v4 field 111 at file offset `0x1757294` selects auxiliary 15, whose relocation at `0x175b328` references the `spotify.login5.v4.identifiers.EmailAddress` table.
 
-1. `v4/login` with `client_info`, `flow_id` and `email_address`.
+1. `v4/login` with `client_info`, a fresh `flow_id` for this attempt and `email_address`.
 2. The server answers with `challenges` (Hashcash first, then `CodeChallenge`) and a `login_context`.
 3. Spotify emails a code. Its length comes from `CodeChallenge` field 2.
 4. Send the code solution with the same `flow_id` and `login_context`.
 5. `LoginOk` returns the access token and a stored credential.
 
 **Live:** this flow returned `LoginOk`, and the stored credential restored the session after the app was force-stopped. It needs no password and changes nothing on the account. Android autofill should be cancelled for the code field so the code is not offered as a password.
+
+**Live, 2026-11-20:** Spotify sent a verification email to an address that returned `UNKNOWN_IDENTIFIER` (5) after code submission. An address from an earlier Spotify sign-in received a login email and returned `LoginOk` using the same flow. A code prompt or delivery of a verification email alone does not establish that an account is linked to the address.
 
 ### Google (v4 and v3, field 108)
 

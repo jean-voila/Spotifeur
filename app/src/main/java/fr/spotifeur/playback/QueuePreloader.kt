@@ -261,7 +261,7 @@ internal class PlaybackRecovery(
         player.addListener(this)
         scope.launch {
             NetworkMonitor.online.collect { online ->
-                if (online && player.playerError != null) { attempts = 0; player.prepare() }
+                if (online && player.playerError?.hasNativePlaybackRefusal() == false) { attempts = 0; player.prepare() }
             }
         }
     }
@@ -277,11 +277,12 @@ internal class PlaybackRecovery(
         lastFailureAt = now
         if (!player.playWhenReady) return
         if (!NetworkMonitor.online.value) { skipToAvailable(); return }
+        if (error.hasNativePlaybackRefusal()) return
         if (attempts >= MAX_ATTEMPTS || (!error.isConnectionFailure() && !error.hasNativePreparationFailure())) return
         attempts++
         retry = scope.launch {
             delay(attempts * RETRY_STEP_MS)
-            if (player.playerError != null) { audio?.retryFailed(); player.prepare() }
+            if (player.playerError?.hasNativePlaybackRefusal() == false) { audio?.retryFailed(); player.prepare() }
         }
     }
 

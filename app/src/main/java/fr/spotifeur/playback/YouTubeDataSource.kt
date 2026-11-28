@@ -16,6 +16,8 @@ import fr.spotifeur.data.AudioIndex
 import fr.spotifeur.data.Music
 import fr.spotifeur.data.YOUTUBE_FILE_PREFIX
 import fr.spotifeur.data.isLocalTrack
+import fr.spotifeur.data.SpotifyAccount
+import fr.spotifeur.data.skibidisong.Skibidisong
 import fr.spotifeur.data.youtube.MatchQuery
 import fr.spotifeur.data.youtube.TrackMatcher
 import fr.spotifeur.data.youtube.YouTubeFailure
@@ -33,13 +35,22 @@ internal object YouTubeUris {
 
     fun isYouTube(uri: Uri?): Boolean = uri?.scheme == SCHEME
 
-    /** The address that plays [track] from YouTube Music, or null when it plays another way. */
-    fun of(track: Music, spotifySignedIn: Boolean): Uri? {
+    /**
+     * The address that plays [track] from YouTube Music, or null when it plays another way. Spotify
+     * tracks go through YouTube Music without a Spotify account, and in Skibidisong mode.
+     * [revision] changes the address of the same track, so the player reads it again.
+     */
+    fun of(
+        track: Music,
+        revision: Int = 0,
+        spotifyThroughYouTube: Boolean = !SpotifyAccount.signedIn || Skibidisong.isActive,
+    ): Uri? {
         track.youTubeVideoId?.let { return Uri.parse("$SCHEME://track/$it") }
-        if (spotifySignedIn || track.isLocalTrack || !track.id.startsWith("spotify:track:")) return null
+        if (track.isLocalTrack || !track.id.startsWith("spotify:track:") || !spotifyThroughYouTube) return null
         return Uri.Builder().scheme(SCHEME).authority("match").appendPath(track.id)
             .appendQueryParameter("title", track.title).appendQueryParameter("artists", track.subtitle)
             .appendQueryParameter("duration", track.durationMs.toString()).appendQueryParameter("album", track.album)
+            .apply { if (revision > 0) appendQueryParameter("r", revision.toString()) }
             .build()
     }
 
@@ -97,8 +108,10 @@ internal class YouTubeDataSource private constructor(private val context: Contex
         val trackId = YouTubeUris.trackId(uri) ?: throw IOException("Unknown YouTube Music address.")
         val videoId = when (uri.authority) {
             "track" -> checkNotNull(uri.lastPathSegment)
-            else -> YouTubeUris.matchQuery(uri)?.let(TrackMatcher::resolve)
-                ?: throw YouTubeFailure("This track was not found on YouTube Music.", "NO_MATCH")
+            else -> YouTubeUris.matchQuery(uri)?.let { query ->
+                if (Skibidisong.isActive) Skibidisong.videoFor(query)
+                else Skibidisong.knownVideo(query.key) ?: TrackMatcher.resolve(query)
+            } ?: throw YouTubeFailure("This track was not found on YouTube Music.", "NO_MATCH")
         }
         position = dataSpec.position
         requestEnd = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.position + dataSpec.length else UNSET

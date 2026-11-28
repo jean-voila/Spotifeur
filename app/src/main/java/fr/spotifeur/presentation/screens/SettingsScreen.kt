@@ -2,6 +2,7 @@ package fr.spotifeur.presentation.screens
 
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.SignalCellularAlt
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SwipeLeft
@@ -350,6 +351,7 @@ private fun PlaybackSettings(model: SpotifeurModel, navController: NavHostContro
             onSelectionChanged = { key -> update { it.copy(downloadQuality = key) } },
             leadingIcon = { Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.secondary) },
         )
+        SwitchSettingItem(stringResource(R.string.settings_skibidisong_title), stringResource(R.string.settings_skibidisong_subtitle), s.skibidisong, { v -> update { it.copy(skibidisong = v) } }, leadingIcon = { Icon(Icons.Rounded.SwapHoriz, null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_normalization_title), stringResource(R.string.settings_normalization_subtitle), s.audioNormalization, { v -> update { it.copy(audioNormalization = v) } }, leadingIcon = { Icon(Icons.Rounded.GraphicEq, null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_keep_playing_title), stringResource(R.string.settings_keep_playing_subtitle), s.keepPlayingInBackground, { v -> update { it.copy(keepPlayingInBackground = v) } }, leadingIcon = { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_pause_on_volume_zero), stringResource(R.string.settings_pause_on_volume_zero_desc), s.pauseOnVolumeZero, { v -> update { it.copy(pauseOnVolumeZero = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_volume_down_24), null, tint = MaterialTheme.colorScheme.secondary) })

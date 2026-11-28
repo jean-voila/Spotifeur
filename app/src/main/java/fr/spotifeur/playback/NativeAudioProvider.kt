@@ -5,6 +5,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.decoder.CryptoInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.SynchronousMediaCodecAdapter
+import fr.spotifeur.data.AudioGrant
+import fr.spotifeur.data.AudioQuality
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.*
 
@@ -123,9 +125,14 @@ internal class NativeAudioProvider(context: Context) : AutoCloseable {
                     item.handle.get(if (fr.spotifeur.data.NetworkMonitor.online.value) ONLINE_WAIT_SECONDS else OFFLINE_WAIT_SECONDS, TimeUnit.SECONDS)
                     if (item.unavailable || closed) throw NativeAudioException("The audio session expired.")
                     val handle = item.currentHandle
-                    val size = item.runtime.get().processor.processSample(handle, checkNotNull(item.scheme), checkNotNull(codec.getInputBuffer(index)),
-                        offset, info.numSubSamples, info.numBytesOfClearData, checkNotNull(info.numBytesOfEncryptedData),
-                        info.encryptedBlocks, info.clearBlocks, checkNotNull(info.iv))
+                    val size = try {
+                        item.runtime.get().processor.processSample(handle, checkNotNull(item.scheme), checkNotNull(codec.getInputBuffer(index)),
+                            offset, info.numSubSamples, info.numBytesOfClearData, checkNotNull(info.numBytesOfEncryptedData),
+                            info.encryptedBlocks, info.clearBlocks, checkNotNull(info.iv))
+                    } catch (refusal: NativeProcessorRefused) {
+                        if (AudioGrant.bandwidthOf(item.fileId) == AudioQuality.NORMAL_BANDWIDTH) throw NativePlaybackRefused(refusal)
+                        throw refusal
+                    }
                     codec.queueInputBuffer(index, offset, size, timeUs, flags)
                 } catch (failure: Exception) {
                     if (failure is android.media.MediaCodec.CodecException || failure is android.media.MediaCodec.CryptoException) throw failure

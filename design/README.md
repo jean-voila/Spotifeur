@@ -3,9 +3,10 @@
 - [IDENTITY.md](IDENTITY.md): fonts, colors, shapes and rules for every visual.
 - [PROMPTS.md](PROMPTS.md): prompts for the logo, the banner and the mockups, and for turning each image into a Sketch file.
 - `logo.svg`: the logo master (1254 × 1254, editable layers), and `logo.png`, a 1024 × 1024 export. The launcher icon in `app/src/main/res/drawable/ic_launcher_*.xml` and the README logo (`docs/assets/img/icon.png`, cropped to a circle) are made from it. The rounded corners of its square are not used: the launcher applies its own mask.
-- `screens/`: app screenshots for the mockups, in English, with a neutral status bar. The example track is "GLUCKSMANN LOVE" by Wailtoad and the example album is "The Dark Side of the Moon" by Pink Floyd. A playlist owner's username is blurred.
+- `screens/`: app screenshots for the mockups (`playback.jpg` shows the Playback settings with Skibidisong on), in English, with a neutral status bar. The example track is "GLUCKSMANN LOVE" by Wailtoad and the example album is "The Dark Side of the Moon" by Pink Floyd. A playlist owner's username is blurred.
 - [`spotifeur-preview.sketch`](spotifeur-preview.sketch): editable README banner and two mockups.
 - [`spotifeur-instagram.sketch`](spotifeur-instagram.sketch): editable story and six carousel slides, in English.
+- [`spotifeur-skibidisong.sketch`](spotifeur-skibidisong.sketch): three stories describing Skibidisong mode (v1.7.0), in English.
 
 Both Sketch documents are source files tracked in Git. They embed their screenshot
 layers and the vector logo. Keep the existing fonts, palette, phone masks
@@ -79,3 +80,26 @@ For direct edits, open the tracked Sketch source, duplicate a frame for a new
 slide, and replace its screenshot image layer or live text. Save the source
 back into `design/`. Export social PNGs outside the repository. To preserve a
 direct edit when rebuilding, apply the same layout or copy change in the script.
+
+## Skibidisong stories
+
+[`spotifeur-skibidisong.sketch`](spotifeur-skibidisong.sketch) contains three 1080 × 1920 frames:
+
+| Frame | Content |
+| --- | --- |
+| `story-01-skibidisong` | What the mode does, with the player |
+| `story-02-matching` | How a recording is chosen by comparing the first seconds |
+| `story-03-order` | Matching order, downloads and the setting |
+
+They follow the story layout: jade cookie and pill shapes, one lavender accent, the logo with the
+name and version, Google Sans Flex with `ROND 100`, and the repository link at the bottom. The two
+wave lines of the second story draw the same signal, so the Spotify excerpt lines up with part of
+the YouTube Music one. [`build-skibidisong.js`](build-skibidisong.js) rebuilds the document and,
+with `--context.output`, exports the PNGs outside the repository:
+
+```sh
+/Applications/Sketch.app/Contents/MacOS/sketchtool run-script \
+  'eval(String(NSString.stringWithContentsOfFile_encoding_error(context.repository + "/design/build-skibidisong.js", 4, null)))' \
+  --context='{"repository":"/path/to/Spotifeur","output":"/path/to/exports"}' \
+  --without-activating=YES
+```

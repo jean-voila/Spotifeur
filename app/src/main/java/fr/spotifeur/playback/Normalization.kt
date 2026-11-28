@@ -29,6 +29,10 @@ object TrackLoudness {
     fun gainDb(context: Context, mediaId: String): Float? {
         if (mediaId.startsWith(YTM_TRACK_PREFIX)) return youtube[mediaId.removePrefix(YTM_TRACK_PREFIX)]?.let { -it }
         if (!mediaId.startsWith("spotify:track:")) return null
+        // Played from its YouTube Music recording: that recording's loudness applies.
+        if (fr.spotifeur.data.skibidisong.Skibidisong.isActive || !fr.spotifeur.data.SpotifyAccount.signedIn) {
+            fr.spotifeur.data.skibidisong.Skibidisong.knownVideo(mediaId)?.let { video -> youtube[video]?.let { return -it } }
+        }
         val values = AudioIndex.get(context).loudness(mediaId) ?: return null
         return spotifyGainDb(values[0], values[1])
     }

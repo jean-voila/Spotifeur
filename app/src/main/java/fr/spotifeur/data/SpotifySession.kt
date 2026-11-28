@@ -106,9 +106,9 @@ internal class SpotifySession(
         save(login.password(client, username, password, code), null)
     }
 
-    suspend fun connectEmail(email: String, flowId: String, code: suspend (Int) -> String) = lock.withLock {
+    suspend fun connectEmail(email: String, code: suspend (Int) -> String) = lock.withLock {
         val client = client().forHost("login5.spotify.com")
-        save(login.email(client, email, flowId, code), null)
+        save(login.email(client, email, code), null)
     }
 
     suspend fun connectGoogle(authCode: String?, idToken: String?, redirectUri: String, code: suspend (Int) -> String) = lock.withLock {

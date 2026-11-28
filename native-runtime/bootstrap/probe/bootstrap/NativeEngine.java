@@ -116,7 +116,7 @@ public final class NativeEngine implements AutoCloseable {
         Map<String,String> sessionHeaders=new HashMap<>();
         sessionHeaders.put("Authorization","Bearer "+accessToken);
         sessionHeaders.put("client-token",(String)input.get("clientToken"));
-        sessionHeaders.put("Spotify-App-Version","9.2.0.26");
+        sessionHeaders.put("Spotify-App-Version","9.2.4.2135");
         sessionHeaders.put("X-Client-Id","9a8d2f0ce77a4e248bb71fefcb557637");
         sessionHeaders.put("App-Platform","Android");
         SdkHttpFactory.offlineForTest=Boolean.TRUE.equals(input.get("offline"));
@@ -168,10 +168,10 @@ public final class NativeEngine implements AutoCloseable {
                     Object config = cls("com.spotify.connectivity.ApplicationScopeConfiguration").getConstructor().newInstance();
                     invoke(config,"setCachePath",cache.getPath());
                     invoke(config,"setClientId","9a8d2f0ce77a4e248bb71fefcb557637");
-                    invoke(config,"setClientVersionLong","9.2.0.26");
+                    invoke(config,"setClientVersionLong","9.2.4.2135");
                     invoke(config,"setDeviceId",deviceId);
                     invoke(config,"setDeviceHardwareModel","Spotifeur");
-                    invoke(config,"setDefaultHTTPUserAgent","Spotify/9.2.0.26 Android/"+android.os.Build.VERSION.SDK_INT+" (Spotifeur)");
+                    invoke(config,"setDefaultHTTPUserAgent","Spotify/9.2.4.2135 Android/"+android.os.Build.VERSION.SDK_INT+" (Spotifeur)");
                     invoke(config,"setAccesspointLanguage","en");
                     // The app's Android ClientToken provider owns renewal, including after an offline start.
                     invoke(config,"setEnableClientToken",false);
@@ -201,23 +201,25 @@ public final class NativeEngine implements AutoCloseable {
                     // Expired web credentials must not block interpretation of an on-device envelope.
                     invoke(access,"setExpiresAt",2147483647L);
                     Object credential = cls("com.spotify.authentication.credentials.UnencryptedCredentials").getConstructor(String.class,byte[].class).newInstance(username,credentialBytes);
-                    Object oauth = invoke(cls("com.spotify.authentication.oauthsetupimpl.NativeOAuthSetupImpl"),"create",loginConfig,timer,login5,access,credential,router,connectivity,false,false); sessionOwned.add(oauth);
+                    Object backoff = cls("com.spotify.authentication.oauthsetupimpl.Login5BackoffConfig").getConstructor().newInstance();
+                    Object oauth = invoke(cls("com.spotify.authentication.oauthsetupimpl.NativeOAuthSetupImpl"),"create",loginConfig,timer,login5,access,credential,router,connectivity,backoff,false,false); sessionOwned.add(oauth);
                     note("Login5/OAuth scopes CREATED");
                     note("BEFORE PubSub.create");
                     Object pubsub = invoke(cls("com.spotify.connectivity.pubsubsetupv2impl.NativePubSubSetupV2Impl"),"create",reachability,timer,oauth,connectivity); sessionOwned.add(pubsub);
                     note("PubSub CREATED");
-                    Object session = invoke(cls("com.spotify.connectivity.auth.NativeSession"),"createNativeSessionWithoutAp",timer,connectivity,credential,oauth,attributes,deviceId); sessionOwned.add(session);
+                    Object productState = invoke(cls("com.spotify.connectivity.auth.NativeProductStateSetup"),"create",timer,attributes); sessionOwned.add(productState);
+                    Object session = invoke(cls("com.spotify.connectivity.auth.NativeSession"),"createNativeSessionWithoutAp",timer,connectivity,credential,oauth,productState,deviceId); sessionOwned.add(session);
                     note("NativeSession CREATED ");
                     note("Native components: oauthPresent="+(oauth!=null)+" oauthHandle="+(oauth!=null && ((Number)invoke(oauth,"getNThis")).longValue()!=0)+" login5Present="+(login5!=null));
                     Object authenticatedConfig = cls("com.spotify.connectivity.AuthenticatedScopeConfiguration").getConstructor().newInstance();
                     invoke(authenticatedConfig,"setCachePath",cache.getPath());
                     invoke(authenticatedConfig,"setClientId","9a8d2f0ce77a4e248bb71fefcb557637");
-                    invoke(authenticatedConfig,"setClientVersionLong","9.2.0.26");
+                    invoke(authenticatedConfig,"setClientVersionLong","9.2.4.2135");
                     invoke(authenticatedConfig,"setDeviceId",deviceId);
                     invoke(authenticatedConfig,"setWebgateLocale","fr-FR");
                     invoke(authenticatedConfig,"setWebgateTimeZone","Europe/Paris");
                     invoke(authenticatedConfig,"setWebgateUserAgentParameterAppPlatform","Android");
-                    invoke(authenticatedConfig,"setWebgateUserAgentParameterAppVersion","9.2.0.26");
+                    invoke(authenticatedConfig,"setWebgateUserAgentParameterAppVersion","9.2.4.2135");
                     invoke(authenticatedConfig,"setWebgateUserAgentParameterOsVersion",android.os.Build.VERSION.RELEASE);
                     note("BEFORE NativeAuthenticatedScope.create");
                     Object authenticated = invoke(cls("com.spotify.connectivity.NativeAuthenticatedScope"),"create",timer,router,connectivity,session,pubsub,analytics,authenticatedConfig,fileIO); sessionOwned.add(authenticated);
@@ -234,7 +236,7 @@ public final class NativeEngine implements AutoCloseable {
                     invoke(fullConfig,"setSettingsPath",settings.getPath());
                     invoke(fullConfig,"setVolatileCachePath",new File(directory,"volatile").getPath());
                     invoke(fullConfig,"setNativeBundleId","com.spotify.music");
-                    invoke(fullConfig,"setVersionName","9.2.0.26");
+                    invoke(fullConfig,"setVersionName","9.2.4.2135");
                     invoke(fullConfig,"setCanPlay",true);
                     invoke(fullConfig,"setDeviceType",invoke(cls("com.spotify.core.core.DeviceType").getField("SMARTPHONE").get(null),"getValue"));
                     invoke(fullConfig,"setDeviceName","Spotifeur");
@@ -242,7 +244,7 @@ public final class NativeEngine implements AutoCloseable {
                     invoke(fullConfig,"setModel",android.os.Build.MODEL);
                     invoke(fullConfig,"setLocale","fr-FR");
                     invoke(fullConfig,"setSupportedContentTypes",(Object)new String[]{"audio"});
-                    Object crypto = invoke(cls("p.amn0"),"a");
+                    Object crypto = invoke(cls("p.n0q0"),"a");
                     note("BEFORE FullAuthenticatedScope.create");
                     Object full = invoke(cls("com.spotify.core.corefullimpl.NativeFullAuthenticatedScopeImpl"),"create",timer,router,prefs,remote,manager,connectivity,session,authenticated,coreApp,local,userdir,fullConfig,registry,foreground,fileIO,null,reachability,reachability,reachability,crypto); sessionOwned.add(full);
                     note("FullAuthenticatedScope CREATED");

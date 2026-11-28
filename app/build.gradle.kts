@@ -21,8 +21,8 @@ android {
         applicationId = providers.gradleProperty("spotifeurTestApplicationId").getOrElse("fr.spotifeur")
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.6.0"
+        versionCode = 25
+        versionName = "1.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "NATIVE_RUNTIME", nativeRuntime.toString())
         buildConfigField("boolean", "FORCE_OFFLINE", project.hasProperty("spotifeurNoInternet").toString())
@@ -98,13 +98,13 @@ dependencies {
 // check the binary into Git. Keep its class loader separate from the app's.
 // Pass -PspotifyArtifact=/path/to/spotify.apkm, or place the extracted files in native-runtime/artifacts.
 val spotifyArtifact = providers.gradleProperty("spotifyArtifact").map { rootProject.file(it) }
-    .orElse(rootProject.file("native-runtime/artifacts/spotify-9.2.0.26.apkm"))
+    .orElse(rootProject.file("native-runtime/artifacts/spotify-9.2.4.2135.apkm"))
 val runtimeAssets = layout.buildDirectory.dir("generated/spotifyRuntime/assets")
 val runtimeLibraries = layout.buildDirectory.dir("generated/spotifyRuntime/jniLibs")
 val spotifyBaseArtifact = providers.gradleProperty("spotifyBaseArtifact").map { rootProject.file(it) }
-    .orElse(rootProject.file("native-runtime/artifacts/spotify-9.2.0.26.base.apk")).filter { it.isFile }
+    .orElse(rootProject.file("native-runtime/artifacts/spotify-9.2.4.2135.base.apk")).filter { it.isFile }
 val spotifyOrbitArtifact = providers.gradleProperty("spotifyOrbitArtifact").map { rootProject.file(it) }
-    .orElse(rootProject.file("native-runtime/artifacts/spotify-9.2.0.26.orbit.so")).filter { it.isFile }
+    .orElse(rootProject.file("native-runtime/artifacts/spotify-9.2.4.2135.orbit.so")).filter { it.isFile }
 val useExtractedArtifacts = !providers.gradleProperty("spotifyArtifact").isPresent && spotifyBaseArtifact.isPresent && spotifyOrbitArtifact.isPresent
 
 tasks.register("prepareSpotifyRuntime") {
@@ -124,13 +124,13 @@ tasks.register("prepareSpotifyRuntime") {
             DigestInputStream(input, digest).use { source -> target.outputStream().use { source.copyTo(it) } }
             check(digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) } == expected) {
                 target.delete()
-                "The supplied artifact differs from Spotify Android 9.2.0.26 (148373686)."
+                "The supplied artifact differs from Spotify Android 9.2.4.2135 (148912737)."
             }
         }
         val base = temporaryDir.resolve("base.apk")
         fun extractBase(input: java.io.InputStream) {
             copyChecked(input, base,
-                "cc165669d31851b1193cae7d54c9261579c431b432080970f460704d06e4612f")
+                "97db061e215bbf5cb1b7f2ee2a6042ce37a41024e5e0339bb9bff1271917b842")
             ZipFile(base).use { apk ->
                 ZipOutputStream(assets.resolve("engine.jar").outputStream().buffered()).use { archive ->
                     apk.entries().asSequence().filter { it.name.matches(Regex("classes[0-9]*\\.dex")) }
@@ -145,7 +145,7 @@ tasks.register("prepareSpotifyRuntime") {
         if (useExtractedArtifacts) {
             extractBase(spotifyBaseArtifact.get().inputStream())
             copyChecked(spotifyOrbitArtifact.get().inputStream(), libs.resolve("liborbit-jni-spotify.so"),
-                "2353f26f5e174917b36c3c9de4538717c6348cc0bacf8b2c094f22d1447538e2")
+                "25911630321ee57f033a1191291becbd84a7f266224c2fbb522b3cf1a8659f65")
         } else ZipFile(spotifyArtifact.get()).use { apkm ->
             extractBase(apkm.getInputStream(apkm.getEntry("base.apk") ?: error("Missing base.apk")))
             val split = temporaryDir.resolve("arm64.apk")
@@ -154,7 +154,7 @@ tasks.register("prepareSpotifyRuntime") {
             ZipFile(split).use { apk ->
                 val library = "liborbit-jni-spotify.so"
                 copyChecked(apk.getInputStream(apk.getEntry("lib/arm64-v8a/$library") ?: error("Missing Orbit library")),
-                    libs.resolve(library), "2353f26f5e174917b36c3c9de4538717c6348cc0bacf8b2c094f22d1447538e2")
+                    libs.resolve(library), "25911630321ee57f033a1191291becbd84a7f266224c2fbb522b3cf1a8659f65")
             }
         }
     }

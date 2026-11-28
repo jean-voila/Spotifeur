@@ -16,6 +16,7 @@ class SpotifeurApplication : Application(), ImageLoaderFactory {
         NetworkMonitor.start(this)
         fr.spotifeur.data.youtube.YouTubeMusic.init(this)
         fr.spotifeur.data.youtube.TrackMatcher.init(this)
+        fr.spotifeur.data.skibidisong.Skibidisong.init(this)
         fr.spotifeur.data.youtube.YouTubeAccount.init(this)
     }
 

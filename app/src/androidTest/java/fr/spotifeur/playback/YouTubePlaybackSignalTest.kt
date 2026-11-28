@@ -64,7 +64,7 @@ class YouTubePlaybackSignalTest {
                     addAnalyticsListener(PlaybackDiagnostics)
                     val factory = ProgressiveMediaSource.Factory(chain.kept)
                     setMediaSources(tracks.map { track ->
-                        val uri = checkNotNull(YouTubeUris.of(track, spotifySignedIn = false))
+                        val uri = checkNotNull(YouTubeUris.of(track, spotifyThroughYouTube = true))
                         factory.createMediaSource(MediaItem.Builder().setMediaId(track.id).setUri(uri)
                             .setCustomCacheKey(YouTubeUris.cacheKey(track.id)).build())
                     })

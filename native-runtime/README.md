@@ -13,7 +13,7 @@ Spotifeur plays audio with Spotify's own native engine (Orbit), taken unchanged 
 
 ## Supplying the engine
 
-You need the official Spotify Android APKM, version **9.2.0.26** (build 148373686). The Gradle task `prepareSpotifyRuntime` extracts:
+You need the official Spotify Android APKM, version **9.2.4.2135** (build 148912737). The Gradle task `prepareSpotifyRuntime` extracts:
 
 - every `classes*.dex` from `base.apk`, packaged as `engine.jar`;
 - `lib/arm64-v8a/liborbit-jni-spotify.so` from `split_config.arm64_v8a.apk`.
@@ -22,12 +22,12 @@ It checks both SHA-256 hashes and stops if they differ.
 
 ```sh
 # Either point Gradle at the APKM
-./gradlew :app:assembleDebug -PspotifyArtifact=/path/to/com.spotify.music_9.2.0.26.apkm
+./gradlew :app:assembleDebug -PspotifyArtifact=/path/to/com.spotify.music_9.2.4.2135.apkm
 
-# or place it at native-runtime/artifacts/spotify-9.2.0.26.apkm
+# or place it at native-runtime/artifacts/spotify-9.2.4.2135.apkm
 # or place the extracted files at
-#   native-runtime/artifacts/spotify-9.2.0.26.base.apk
-#   native-runtime/artifacts/spotify-9.2.0.26.orbit.so
+#   native-runtime/artifacts/spotify-9.2.4.2135.base.apk
+#   native-runtime/artifacts/spotify-9.2.4.2135.orbit.so
 ```
 
 Nothing is downloaded automatically. The engine is ARM64 only.
@@ -45,7 +45,7 @@ The engine's JNI code calls `FindClass` with dotted class names, which CheckJNI 
 1. Load `engine.jar`, `bootstrap.dex` and Orbit in one child class loader.
 2. Start the native timer thread and create every scope on it.
 3. Register the HTTP factory and the mobile device info before Connectivity.
-4. Create Connectivity/Core, Login5/OAuth, PubSub, NativeSession, Authenticated and FullAuthenticated, in that order.
+4. Create Connectivity/Core, Login5/OAuth, PubSub, NativeProductStateSetup, NativeSession, Authenticated and FullAuthenticated, in that order. Initialize the product state with the account attributes returned by Spotify.
 5. Follow Android connectivity. Recreate the session and handles when the account changes.
 6. On shutdown, close subscriptions and processors first, call `prepareForShutdown`, then destroy scopes in reverse order and the timer last.
 

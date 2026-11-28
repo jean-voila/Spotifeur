@@ -47,7 +47,7 @@ are illustrations. Editable artwork is in [`design/`](design/).
 
 - **Home and library.** Pinned items, recently played tracks, downloads, liked songs, playlists, albums, artists and local files. Each home shelf can be shown or hidden, moved, and laid out as a row, a large row, a grid, a list or pills, with the number of items you choose. The buttons of album and playlist pages can be arranged as well, the others staying in a ⋮ menu. Pins are stored on the device only.
 - **Player.** Full-screen player with seek bar, queue, shuffle, repeat, sleep timer, a ⋮ button for the options of the current track (can be hidden), and the codec and bitrate of the current track if you want them. Swiping the mini player left or right changes track (it can also close the player, or do nothing).
-- **Audio quality.** Separate settings for Wi-Fi, mobile data and downloads: Normal (AAC 128 kbit/s), Very high (up to AAC 256 kbit/s) or Automatic. Playback and downloads use the quality authorized by the Spotify account: 128 kbit/s for Free, up to 256 kbit/s for Premium. Optional volume normalization from the loudness Spotify and YouTube Music publish for each track.
+- **Audio quality.** Choose Normal (AAC 128 kbit/s), Very high (up to AAC 256 kbit/s) or Automatic separately for Wi-Fi, mobile data and downloads. Spotify playback uses the quality the account authorizes. Optional volume normalization uses the loudness Spotify and YouTube Music publish for each track.
 - **Listening history.** Tracks played in Spotifeur from Spotify, YouTube Music and local files, together with what Spotify reports from your other apps and devices, grouped by day.
 - **Lyrics.** Synced lyrics from Spotify, with an immersive mode. When Spotify has none, Spotifeur can look them up on LRCLIB.
 - **Queue.** Reorder by dragging, swipe to remove, optional history of played tracks. The tracks you queued are shown apart from the rest of the list.
@@ -55,9 +55,10 @@ are illustrations. Editable artwork is in [`design/`](design/).
 - **Converter.** Convert a playlist between Spotify, YouTube Music and multi-service playlists, in every direction (playlist page → ⋮ → Convert to…). Matches on the destination appear as they are found, uncertain ones are highlighted, and each track can be replaced by another search result or left out before the new playlist is created.
 - **Import and export.** Export a playlist as CSV, and import a CSV exported by Spotifeur or a YouTube, YouTube Music or Spotify playlist link.
 - **YouTube Music.** Search and play the YouTube Music catalog without a Google account, with the same downloads, cache, queue and playlists as Spotify tracks. Without a Spotify account, Spotify tracks play from their closest YouTube Music match (title, artist, album and duration).
+- **Skibidisong.** On a Spotify account that stops each track after a few seconds, Spotify tracks play their YouTube Music recording instead, in playlists, albums, the queue and downloads. Each match is checked by comparing the start of both recordings. The track you start is matched first, then the queue, then the rest of the playlist in the background, and matches are kept on the device. On by default in Settings → Playback.
 - **Google account.** Connect a Google account in Settings → Accounts to see your YouTube Music playlists in the library, create playlists on the account, rename them, make them public or private, add and remove tracks, and delete them. Audio still plays without the account.
 - **Liked YouTube Music tracks.** YouTube Music tracks can be liked like Spotify ones. They appear at the top of Liked songs, and are also liked on YouTube Music when a Google account is connected.
-- **Albums and artists.** Album pages, and artist pages with monthly listeners, popular tracks and their play counts, popular releases, albums, singles and EPs, compilations, appearances, related artists and the biography. YouTube Music tracks open YouTube Music's album and artist pages. Radios based on a track, an album, an artist or a playlist.
+- **Albums and artists.** Album pages, and artist pages with monthly listeners, popular tracks and their play counts, popular releases, albums, singles and EPs, compilations, appearances, related artists and the biography. YouTube Music tracks open YouTube Music's album and artist pages. Radios can start from a track, album, artist or playlist. Starting a radio from the current track keeps it playing at its current position.
 - **Swipe on tracks.** Swiping a track right adds it to the queue. Each direction can be set to add to the queue, play next, save to Liked songs, remove from the playlist, or nothing. Recent searches follow the swipe-right setting.
 - **Search.** One search across Spotify, YouTube Music and the device's own files, for tracks, albums, artists and playlists, most relevant first, shown as each source answers, with paging. A setting shows a choice to search one source alone. Recent searches list what you opened or played; tapping one leaves it in place, and the current track is highlighted. Each playlist has its own search by title, artist or album, above its first track.
 - **Offline.** Download albums, playlists or tracks. Recently played and upcoming tracks are kept in a cache, encrypted for Spotify (512 MB to 32 GB, up to 20 tracks ahead). An offline mode cuts all network access from the app.
@@ -147,16 +148,16 @@ official Spotify APK you supply.
 
 <a id="build-from-source"></a>
 
-Requirements: JDK 21, Android SDK with platform 37, an ARM64 Android device (Android 8.0 or later), and the official Spotify Android **APKM, version 9.2.0.26** (build 148373686). The build checks the SHA-256 of the files it extracts and stops if they differ.
+Requirements: JDK 21, Android SDK with platform 37, an ARM64 Android device (Android 8.0 or later), and the official Spotify Android **APKM, version 9.2.4.2135** (build 148912737). The build checks the SHA-256 of the files it extracts and stops if they differ.
 
 ```sh
 git clone https://github.com/jean-voila/Spotifeur.git
 cd Spotifeur
-./gradlew :app:assembleDebug -PspotifyArtifact=/path/to/com.spotify.music_9.2.0.26.apkm
+./gradlew :app:assembleDebug -PspotifyArtifact=/path/to/com.spotify.music_9.2.4.2135.apkm
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-You can also place the APKM at `native-runtime/artifacts/spotify-9.2.0.26.apkm`. Nothing is downloaded automatically. See [`native-runtime/README.md`](native-runtime/README.md) for details.
+You can also place the APKM at `native-runtime/artifacts/spotify-9.2.4.2135.apkm`. Nothing is downloaded automatically. See [`native-runtime/README.md`](native-runtime/README.md) for details.
 
 Without the APKM, `-PnativeRuntime=false` builds the app and runs the tests, but playback stops after the first seconds of each track. The [CI](.github/workflows/build.yml) uses this mode.
 

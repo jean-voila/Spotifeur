@@ -55,6 +55,7 @@ object YouTubeMusic {
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true).build()
     private val streams = HashMap<String, YouTubeStream>()
+    private val excerpts = HashMap<String, YouTubeStream>()
     private var playerJs: Pair<String, String>? = null
     private val decipher by lazy { YouTubeDecipher(checkNotNull(app)) }
 
@@ -197,6 +198,19 @@ object YouTubeMusic {
     /** Resolves the best audio-only format, trying each client until one hands back a usable address. */
     internal fun stream(videoId: String, excluded: Set<String> = emptySet()): YouTubeStream {
         if (excluded.isEmpty()) cachedStream(videoId)?.let { return it }
+        return resolveStreams(videoId, excluded, excerpt = false)
+    }
+
+    /**
+     * The smallest audio format with a known length, preferably MP4, for reading the first seconds of a
+     * recording. The playback address is resolved by the same request and kept for the player.
+     */
+    internal fun excerptStream(videoId: String): YouTubeStream {
+        synchronized(this) { excerpts[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() + STREAM_MARGIN_MS } }?.let { return it }
+        return resolveStreams(videoId, emptySet(), excerpt = true)
+    }
+
+    private fun resolveStreams(videoId: String, excluded: Set<String>, excerpt: Boolean): YouTubeStream {
         val clients = YouTubeClient.entries.filterNot { it.clientName in excluded }
         if (clients.isEmpty()) throw YouTubeFailure("No client could open this track.", "ALL_CLIENTS_EXCLUDED")
         val initial = visitorData
@@ -215,17 +229,19 @@ object YouTubeMusic {
         }
         val js = if (formats.any { it.url == null }) runCatching { playerScript(videoId) }.getOrNull() else null
         var last: Exception? = null
-        for (format in preferredOrder(formats)) {
-            try {
-                val url = format.url ?: decipher.playableUrl(format, js)
-                val expires = url.toHttpUrlOrNull()?.queryParameter("expire")?.toLongOrNull()?.times(1000)
-                    ?: (System.currentTimeMillis() + DEFAULT_LIFETIME_MS)
-                val resolved = YouTubeStream(videoId, url, client.userAgent, client.clientName, format.contentLength,
-                    format.mimeType, format.bitrate, format.sampleRate, expires)
-                synchronized(this) { streams[videoId] = resolved }
-                return resolved
-            } catch (failure: Exception) { last = failure }
-        }
+        fun open(format: YouTubeFormat): YouTubeStream? = try {
+            val url = format.url ?: decipher.playableUrl(format, js)
+            val expires = url.toHttpUrlOrNull()?.queryParameter("expire")?.toLongOrNull()?.times(1000)
+                ?: (System.currentTimeMillis() + DEFAULT_LIFETIME_MS)
+            YouTubeStream(videoId, url, client.userAgent, client.clientName, format.contentLength,
+                format.mimeType, format.bitrate, format.sampleRate, expires)
+        } catch (failure: Exception) { last = failure; null }
+        val playback = preferredOrder(formats).firstNotNullOfOrNull(::open)
+        playback?.let { synchronized(this) { streams[videoId] = it } }
+        if (excerpt) {
+            val small = excerptOrder(formats).firstNotNullOfOrNull(::open) ?: playback
+            small?.let { synchronized(this) { excerpts[videoId] = it }; return it }
+        } else playback?.let { return it }
         throw (last as? YouTubeFailure) ?: YouTubeFailure("No audio format could be opened.", "NO_AUDIO_FORMAT")
     }
 
@@ -464,6 +480,10 @@ internal fun audioFormats(response: JSONObject): List<YouTubeFormat> {
 }
 
 /** Highest bitrate first; formats with a known length come first, since the player can then seek and cache them. */
+/** Lowest bitrate first, MP4 before WebM: an excerpt is decoded from a partial file, which fragmented MP4 suits best. */
+internal fun excerptOrder(formats: List<YouTubeFormat>): List<YouTubeFormat> =
+    formats.filter { it.contentLength > 0 }.sortedWith(compareByDescending<YouTubeFormat> { it.mimeType.startsWith("audio/mp4") }.thenBy { it.bitrate })
+
 internal fun preferredOrder(formats: List<YouTubeFormat>): List<YouTubeFormat> =
     formats.sortedWith(compareByDescending<YouTubeFormat> { it.contentLength > 0 }.thenByDescending { it.bitrate })
 

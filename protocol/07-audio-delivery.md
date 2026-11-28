@@ -66,7 +66,7 @@ selection is used for streaming, prefetch and downloads; the stored user setting
 is unchanged. The account policy is refreshed for a new session and retained per
 account for offline startup. No other attribute values have been measured.
 
-**Live after the selection change:** on this Free account, both quality presets
+**Live after the selection change:** on this Free account with introductory offline access, both quality presets
 produce PCM at 128 kbit/s past the lead-in and after seeks. A two-track test also
 measures PCM after an automatic transition. The real playback service passes
 pause/resume, shuffle/repeat, seek, next and background checks, with PCM measured
@@ -88,12 +88,25 @@ lowers the account's limit at run time; the limit is kept until `type` or `audio
 `GetMediaHandleId` has the top-level fields `1=5`, `2` (16 bytes), `4=1`, `5=1` and `6` (a Unix
 time in seconds). Read with librespot's `PlayPlayLicenseRequest` names, these are version, token,
 interactivity INTERACTIVE and content type AUDIO_TRACK: a streaming request, not a download.
-The `Download` service still depends on the `offline` attribute; see
-[08-native-engine.md](08-native-engine.md#credentials-and-http).
+The native processor can refuse playback independently of the HTTP key response. On 2026-11-25,
+the same Free account reported `offline=false`. A fresh 128 kbit/s key request returned HTTP 200,
+then the native factory refused to create a processor at the first encrypted sample. See
+[08-native-engine.md](08-native-engine.md#credentials-and-http) for the live test and the earlier local attribute test.
 
 ### Mode 1 is not enough
 
 **Live:** with the platform Widevine CDM, mode 1 plays the unencrypted lead-in (about 10 s), then the encrypted part decodes to invalid AAC frames that Android replaces with silence. Position, `PLAYING` state and buffer level all look normal. Only measuring the decoded PCM reveals the problem. Mode 4 with the native engine is the path that produces signal past the lead-in.
+
+### Clear lead-in without the engine
+
+**Live (2026-11-25, 9.2.4.2135, Free account with `offline=false`):** the 128 kbit/s file starts with
+fragments that carry no sample encryption data. A standard fragmented MP4 parser marks their samples
+clear, and the platform AAC decoder decodes them without `MediaCrypto` or the native processor. The
+clear part lasted about 10 s on most files and 12 s or more on some. Bytes 0–150 000 of the signed CDN
+address, the same address the engine reads, hold the init segment and about 8 s of AAC frames
+(347 frames, 44.1 kHz stereo). The first encrypted sample marks the end of the clear part. Spotifeur
+reads this lead-in only to compare a Spotify track with YouTube Music recordings (Skibidisong mode);
+it is never played this way.
 
 ### Mode 4 and the native engine
 

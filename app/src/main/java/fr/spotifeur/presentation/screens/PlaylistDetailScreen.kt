@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -102,8 +103,9 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
     val discovery by model.discovery.collectAsStateWithLifecycle()
     val exportCsv = fr.spotifeur.presentation.components.rememberPlaylistCsvExport(model)
     // Positions in the stored playlist, so removing a track still targets the right one once sorted.
-    val ordered = remember(content?.tracks, saved, sort, localFiles) {
-        model.withLocalFiles(content?.tracks.orEmpty()).mapIndexed { index, music -> index to music.toSong(music.id in saved) }
+    val tracks = remember(content?.tracks, localFiles) { model.withLocalFiles(content?.tracks.orEmpty()) }
+    val ordered = remember(tracks, saved, sort) {
+        tracks.mapIndexed { index, music -> index to music.toSong(music.id in saved) }
             .sortedForPlaylist(sort) { it.second.title }
     }
     // Search inside this playlist, revealed by pulling down at the top of the list.
@@ -190,6 +192,17 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
         if (from.index >= first && to.index >= first) model.localPlaylistStore.move(playlistId, from.index - first, to.index - first)
     }
 
+    // Skibidisong mode matches the rows on screen ahead of the rest of the background work, once scrolling stops.
+    LaunchedEffect(listState, tracks) {
+        val byId = tracks.associateBy { it.id }
+        snapshotFlow { if (listState.isScrollInProgress) null else listState.layoutInfo.visibleItemsInfo.mapNotNull { (it.key as? String)?.substringBefore('#') } }
+            .collectLatest { ids ->
+                if (ids == null) return@collectLatest
+                kotlinx.coroutines.delay(BROWSE_SETTLE_MS)
+                model.browseTracks(ids.mapNotNull(byId::get))
+            }
+    }
+    androidx.compose.runtime.DisposableEffect(playlistId) { onDispose { model.browseTracks(emptyList()) } }
     // Another order only means something once the whole playlist is there.
     LaunchedEffect(sort, filter.isBlank(), content?.nextPage, detail?.loading) {
         if ((sort != PlaylistSort.DEFAULT || filter.isNotBlank()) && content?.nextPage != null && detail?.loading != true) model.loadDetail(item, more = true)
@@ -375,6 +388,7 @@ fun PlaylistDetailScreen(model: SpotifeurModel, navController: NavHostController
 
 /** The search field item sits above the page's first visible item. */
 private const val PLAYLIST_FILTER_ITEMS = 1
+private const val BROWSE_SETTLE_MS = 600L
 
 /** Title, artists or album contain every word of [query], ignoring case and accents. */
 internal fun Song.matchesPlaylistFilter(query: String): Boolean = fr.spotifeur.utils.matchesWords(query, title, displayArtist, album)

@@ -65,6 +65,8 @@ data class AppSettings(
     val miniPlayerSwipe: String = MINI_SWIPE_TRACKS,
     /** The Spotify / YouTube / Device choice above search results. Hidden: every search reads all sources. */
     val showSearchSources: Boolean = false,
+    /** On a restricted Spotify account, Spotify tracks play their YouTube Music recording. */
+    val skibidisong: Boolean = true,
 ) {
     fun actions(page: DetailPage): List<ActionSlot> =
         DetailActions.decode(page, if (page == DetailPage.ALBUM) albumActions else playlistActions)
@@ -89,7 +91,7 @@ data class AppSettings(
         .put("streamingQualityWifi", streamingQualityWifi).put("streamingQualityMobile", streamingQualityMobile)
         .put("downloadQuality", downloadQuality).put("audioNormalization", audioNormalization)
         .put("showPlayerMenuButton", showPlayerMenuButton).put("miniPlayerSwipe", miniPlayerSwipe)
-        .put("showSearchSources", showSearchSources)
+        .put("showSearchSources", showSearchSources).put("skibidisong", skibidisong)
 
     companion object {
         const val THEME_SYSTEM = "system"
@@ -153,6 +155,7 @@ data class AppSettings(
                 miniPlayerSwipe = json.optString("miniPlayerSwipe", d.miniPlayerSwipe)
                     .takeIf { it in setOf(MINI_SWIPE_TRACKS, MINI_SWIPE_DISMISS, MINI_SWIPE_OFF) } ?: d.miniPlayerSwipe,
                 showSearchSources = json.optBoolean("showSearchSources", d.showSearchSources),
+                skibidisong = json.optBoolean("skibidisong", d.skibidisong),
             )
         }
     }
@@ -167,9 +170,10 @@ class SettingsStore private constructor(context: Context) {
         try { AppSettings.fromJson(JSONObject(saved)) } catch (_: org.json.JSONException) { null }
     } ?: AppSettings()
 
-    fun update(change: (AppSettings) -> AppSettings) {
+    /** [commit] writes before returning, for callers that may be stopped right after (instrumented tests). */
+    fun update(commit: Boolean = false, change: (AppSettings) -> AppSettings) {
         mutable.update(change)
-        preferences.edit { putString(KEY, mutable.value.toJson().toString()) }
+        preferences.edit(commit = commit) { putString(KEY, mutable.value.toJson().toString()) }
     }
 
     companion object {

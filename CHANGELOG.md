@@ -4,6 +4,26 @@
 
 Nothing yet.
 
+## v1.7.0
+
+### Added
+
+- Skibidisong mode, on by default (Settings → Playback). On a Spotify account whose audio stops after the clear lead-in, Spotify tracks play their YouTube Music recording, in playlists, albums, the queue, radios and downloads. The account is recognized from its attributes (`type` other than `premium` with `offline=false` or `on-demand=false`), or when the native engine refuses its encrypted audio; playback then moves to YouTube Music at the same position.
+- Each match is checked by ear: the Spotify lead-in (first 8 s of the 128 kbit/s file, decoded without the engine) and the first 15 s of each YouTube Music candidate are turned into 32-bit band-energy fingerprints and compared at every offset. A bit error rate of 0.35 or less counts as the same recording; at 0.20 or less the candidate is taken at once, otherwise the other candidates are heard too and the closest wins. Candidates are the first search result and the next three, then three more from a search with the version words and every artist. Without a match, the first result is kept.
+- Matching order: the track being started, then the queue, then the tracks on screen in a playlist, then the rest of the playing context in the background. On mobile data the rest of the context is matched by text and checked once it reaches the queue. Matches are kept in their own database on the device.
+- Downloads made in Skibidisong mode keep the YouTube Music recording; Spotify files already downloaded are downloaded again that way.
+
+### Fixed
+
+- Starting a radio from the current track keeps its current media item and playback position. The radio follows the tracks the listener already queued. A radio that finishes loading after the listener switches tracks leaves playback alone.
+- Email sign-in uses a new Login5 flow for each attempt and gives a localized explanation when Spotify sends a verification code but finds no account linked to the address.
+- With Skibidisong off, a native playback refusal at standard quality stops automatic retries and reports the error. Diagnostics include the code returned by the native processor factory.
+
+### Changed
+
+- YouTube Music matching of Spotify tracks searches with the version words of the title (live, remix, extended…) and ranks karaoke, "in the style of", sound-alike and 432 Hz uploads below the original.
+- Updated the bundled Spotify Android runtime to 9.2.4.2135. The native session uses the account's reported product state. In a live test after introductory offline access ended, the native processor refused encrypted audio on the Free account after the clear lead-in.
+
 ## v1.6.0
 
 ### Added
@@ -91,7 +111,7 @@ Nothing yet.
 
 ### Fixed
 
-- Spotify Free accounts without the offline entitlement (`offline=false`, the usual Free plan) stopped after the clear lead-in, about 9 seconds into each track, then restarted in short bursts. The native engine's `Download` service, which provides Spotifeur's media handles, accepts the key and then fails the handle when that attribute is false. The engine session now always receives `offline=true`; the account's other attributes are passed unchanged. The new Free test account had an introductory trial with `offline=true`, `on-demand=true` and `ads=false`, which is why it played.
+- Setting `offline=false` locally reproduced a stop about nine seconds into playback. This release substituted the offline attribute in the engine. Testing at the time used an introductory Free account with server-side offline access. See [the later live test](protocol/08-native-engine.md#credentials-and-http).
 - The playback retry counter no longer resets each time the player becomes ready. A track that fails after its lead-in is retried four times, then the error is shown, instead of stopping and restarting forever.
 - `audio-quality` follows the official values (`0` standard, `1` very high, `2` lossless). Without a known value, only Premium accounts select 256 kbit/s. A key refused by the service (HTTP 4xx) for a file above 128 kbit/s lowers that account's limit to 128 kbit/s until its plan attributes change.
 - HTTP 429 from Spotify is retried after `Retry-After` (at most 15 s for what the user opened). The background library sync waits out the limit, reads one metadata batch at a time, yields to foreground requests and pauses 1 s between pages. Large libraries no longer exhaust the request budget needed to open albums and playlists.
@@ -109,7 +129,7 @@ Nothing yet.
 
 ### Fixed
 
-- Spotify Free playback selects the AAC variant allowed by the account's `audio-quality` attribute for streaming and downloads. Quality 0 permits 128 kbit/s but the service refuses 256 kbit/s with HTTP 403; choosing the latter previously stopped audio after the clear lead-in. Cached variants cannot override this account limit. User quality preferences are retained.
+- Spotify playback selects the AAC variant allowed by the account's `audio-quality` attribute for streaming and downloads. The introductory Free account with quality 0 played at 128 kbit/s and received HTTP 403 at 256 kbit/s. Cached variants are subject to the account's quality limit. User quality preferences are retained.
 
 ### Changed
 

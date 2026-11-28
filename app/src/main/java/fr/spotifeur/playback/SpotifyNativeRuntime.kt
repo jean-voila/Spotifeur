@@ -77,7 +77,6 @@ internal class SpotifyNativeRuntime private constructor(private val engine: Any,
 
     companion object {
         private val poolLock = Mutex()
-        private const val OFFLINE_ATTRIBUTE = "offline"
         /** Instrumented tests only: entitlements of another account type, given to the engine. */
         @Volatile internal var attributeOverridesForTest: Map<String, String> = emptyMap()
         private var shared: SpotifyNativeRuntime? = null
@@ -160,12 +159,8 @@ internal class SpotifyNativeRuntime private constructor(private val engine: Any,
                 runtime.references++
                 return@withLock runtime
             }
-            val account = sessionAttributes(app, session) + attributeOverridesForTest
-            // Live: with offline=false (Spotify Free without the new-account trial), the engine's
-            // Download service accepts the key, then the media handle fails when the first encrypted
-            // sample arrives, just after the clear lead-in. Its handles serve both streaming and
-            // downloads here, so it must always see the offline entitlement.
-            val attributes = account + (OFFLINE_ATTRIBUTE to "true")
+            val account = sessionAttributes(app, session)
+            val attributes = account + attributeOverridesForTest
             android.util.Log.i("SpotifeurNative", "Session attributes=${attributes.size} playerLicense=${attributes.containsKey("player-license")}")
             fr.spotifeur.data.diagnostics.DiagnosticLog.record("audio", "engine session ${attributeSummary(account)}")
             val directory = File(app.noBackupFilesDir, "native-audio").apply { mkdirs() }

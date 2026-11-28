@@ -63,8 +63,27 @@ class NativeAudioTest {
         adapter.close()
     }
 
+    @Test fun reportsProcessorRefusalWithoutLosingTheNativeCode() {
+        NativeSampleProcessor(RejectingFactory()).use { adapter ->
+            val refusal = assertThrows(NativeProcessorRefused::class.java) {
+                adapter.processSample(1, NativeAudioScheme.CBCS, ByteBuffer.allocateDirect(16),
+                    0, 1, null, intArrayOf(16), 1, 9, ByteArray(16))
+            }
+            assertEquals(5, refusal.nativeCode)
+            assertFalse(refusal.hasNativePlaybackRefusal())
+            val terminal = NativePlaybackRefused(refusal)
+            assertEquals(5, terminal.nativeCode)
+            assertTrue(IllegalStateException(terminal).hasNativePlaybackRefusal())
+        }
+    }
+
     enum class Mode { STREAM, BLOCK }
     class Result(private val value: Processor) { fun getProcessor() = value }
+    class Refusal { fun getCode() = 5 }
+    class RejectingFactory {
+        @Suppress("UNUSED_PARAMETER")
+        fun createProcessor(handle: Int, mode: Mode) = Refusal()
+    }
     class Factory {
         val created = mutableListOf<Processor>()
         var last: Processor? = null

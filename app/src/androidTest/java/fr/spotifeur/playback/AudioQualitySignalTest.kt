@@ -64,7 +64,10 @@ class AudioQualitySignalTest {
                     override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
                         DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(SignalProbe())).build()
                 }
-                player = ExoPlayer.Builder(app, renderers).build().apply { addAnalyticsListener(PlaybackDiagnostics) }
+                player = ExoPlayer.Builder(app, renderers).build().apply {
+                    volume = 0f
+                    addAnalyticsListener(PlaybackDiagnostics)
+                }
             }
             val used = mutableSetOf<String>()
             for (quality in listOf(AudioQuality.NORMAL, AudioQuality.VERY_HIGH)) {

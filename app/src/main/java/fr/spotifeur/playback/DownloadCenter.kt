@@ -122,6 +122,7 @@ object DownloadCenter {
                 }
                 override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) { publish(); scheduleSweep() }
             })
+            scope.launch { fr.spotifeur.data.skibidisong.Skibidisong.active.collect { active -> if (active) convertToYouTube(application, created) } }
             scope.launch { NetworkMonitor.online.collect { online ->
                 if (online) created.resumeDownloads() else created.pauseDownloads()
                 samples.clear(); speed = 0.0; publish()
@@ -217,6 +218,25 @@ object DownloadCenter {
         ContextCompat.startForegroundService(context.applicationContext, Intent(context, SpotifeurDownloadService::class.java))
     }
 
+    /**
+     * In Skibidisong mode a Spotify file stops after its clear lead-in: kept tracks are downloaded again
+     * as their YouTube Music recording.
+     */
+    private suspend fun convertToYouTube(context: Context, current: DownloadManager) {
+        while (!current.isInitialized) delay(200)
+        val spotify = withContext(Dispatchers.IO) {
+            buildList { current.downloadIndex.getDownloads().use { cursor -> while (cursor.moveToNext()) {
+                val download = cursor.download
+                if (download.request.uri.scheme == "spotify" && download.state != Download.STATE_REMOVING) add(download.request.id)
+            } } }
+        }
+        if (spotify.isEmpty()) return
+        android.util.Log.i("Skibidisong", "downloads: ${spotify.size} Spotify files replaced by their YouTube Music recording")
+        spotify.forEach(current::removeDownload)
+        publish()
+        start(context)
+    }
+
     /** Compatibility for callers requesting an individual track. */
     fun add(context: Context, track: Music, onFailure: () -> Unit) = enqueue(context, track, listOf(track), onFailure)
 
@@ -238,8 +258,8 @@ object DownloadCenter {
         val context = checkNotNull(app)
         try {
             withContext(Dispatchers.IO) { AudioIndex.get(context).describe(track, played = false) }
-            // YouTube Music tracks, and Spotify tracks without an account, are kept as their YouTube Music file.
-            YouTubeUris.of(track, SpotifyAccount.signedIn)?.let { uri ->
+            // YouTube Music tracks, and Spotify tracks without an account or in Skibidisong mode, are kept as their YouTube Music file.
+            YouTubeUris.of(track)?.let { uri ->
                 val request = DownloadRequest.Builder(track.id, uri).setCustomCacheKey(YouTubeUris.cacheKey(track.id))
                     .setData(encodePins(listOf(track)).toByteArray()).build()
                 if (records.values.any { record -> record.tracks.any { it.id == track.id } }) {

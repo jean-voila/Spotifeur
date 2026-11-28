@@ -60,7 +60,17 @@ internal enum class NativeAudioScheme(val wireName: String, val mode: String, va
     }
 }
 
-internal class NativeAudioException(message: String, val nativeCode: Int? = null, cause: Throwable? = null) : IOException(message, cause)
+internal open class NativeAudioException(message: String, val nativeCode: Int? = null, cause: Throwable? = null) : IOException(message, cause)
+
+internal class NativeProcessorRefused(code: Int?) :
+    NativeAudioException("The native engine refused to create a media processor.", code)
+
+/** The processor refused the standard variant, so automatic quality fallback cannot help. */
+internal class NativePlaybackRefused(cause: NativeProcessorRefused) :
+    NativeAudioException("Spotify refused to prepare playback at standard quality.", cause.nativeCode, cause)
+
+internal fun Throwable.hasNativePlaybackRefusal(): Boolean =
+    generateSequence(this) { it.cause }.take(12).any { it is NativePlaybackRefused }
 
 /** One instance per media session. The supplied engine owns its opaque processing state. */
 internal class NativeSampleProcessor(private val factory: Any) : AutoCloseable {
@@ -94,7 +104,11 @@ internal class NativeSampleProcessor(private val factory: Any) : AutoCloseable {
             val result = call(create, factory, handle, modes[scheme.mode] ?: error("Missing processing mode."))
                 ?: throw NativeAudioException("The native processor factory returned no result.")
             val getter = result.javaClass.methods.firstOrNull { it.name == "getProcessor" && it.parameterCount == 0 }
-                ?: throw NativeAudioException("The native engine refused to create a media processor.")
+            if (getter == null) {
+                val getCode = result.javaClass.methods.firstOrNull { it.name == "getCode" && it.parameterCount == 0 }
+                val code = getCode?.let { call(it, result) as? Int }
+                throw NativeProcessorRefused(code)
+            }
             val processor = call(getter, result) ?: throw NativeAudioException("Missing media processor.")
             try {
                 Entry(processor, processor.javaClass.getMethod("processSample", ByteBuffer::class.java,

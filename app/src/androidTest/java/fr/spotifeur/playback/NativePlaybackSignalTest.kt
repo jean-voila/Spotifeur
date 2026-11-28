@@ -13,6 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import fr.spotifeur.MainActivity
 import fr.spotifeur.data.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -21,6 +22,42 @@ import org.junit.runner.RunWith
 @androidx.annotation.OptIn(UnstableApi::class)
 @RunWith(AndroidJUnit4::class)
 class NativePlaybackSignalTest {
+    @Test fun standardQualityRefusalStopsAutomaticRetry(): Unit = runBlocking {
+        val args = InstrumentationRegistry.getArguments()
+        assumeTrue(args.getString("spotifyRefusalDiagnostic") == "true")
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val session = SpotifyAccount.require(app)
+        val transport = SpotifyAccount.transport
+        val attributes = spotifyAttributes(transport, session)
+        assertEquals("free", attributes["type"])
+        assertEquals("false", attributes["offline"])
+        val uri = checkNotNull(args.getString("spotifyTrackUris")).substringBefore(',')
+        val track = SpotifyCatalog(transport, session).hydrate(listOf(uri)).single()
+        // Skibidisong mode would move the track to YouTube Music: this test covers the engine's own refusal.
+        val settings = fr.spotifeur.data.preferences.SettingsStore.get(app)
+        val skibidisong = settings.settings.value.skibidisong
+        settings.update(commit = true) { it.copy(skibidisong = false) }
+        withTimeout(5_000) { while (fr.spotifeur.data.skibidisong.Skibidisong.isActive) delay(20) }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val player = withContext(Dispatchers.Main) { SpotifyPlayer(app, scope) }
+        try {
+            val before = PlaybackDiagnostics.nonSilentBuffers.get()
+            withContext(Dispatchers.Main) { player.play(listOf(track)) }
+            val refusal = withTimeout(35_000) { player.state.first { it.error != null } }
+            assertTrue("The clear lead-in produced PCM", PlaybackDiagnostics.nonSilentBuffers.get() > before)
+            assertTrue("The player exposes the native refusal: ${refusal.error}", refusal.spotifyPlaybackRefused)
+            assertEquals(app.getString(fr.spotifeur.R.string.spotify_playback_refused), refusal.error)
+            val stopped = PlaybackDiagnostics.nonSilentBuffers.get()
+            delay(6_000)
+            assertTrue("The refusal remains visible", player.state.value.spotifyPlaybackRefused)
+            assertEquals("The clear lead-in did not restart", stopped, PlaybackDiagnostics.nonSilentBuffers.get())
+        } finally {
+            withContext(Dispatchers.Main) { player.stop(); player.close() }
+            scope.cancel()
+            settings.update(commit = true) { it.copy(skibidisong = skibidisong) }
+        }
+    }
+
     @Test fun signalBeyondClearLeadAndAfterSeeks(): Unit = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("spotifyAudioStress") == "true")
         val ins = InstrumentationRegistry.getInstrumentation()
@@ -33,12 +70,20 @@ class NativePlaybackSignalTest {
         val tracks = (if (requested != null) catalog.hydrate(requested)
             else SpotifyLibrary(SpotifyAccount.transport, session, catalog).load().savedTracks)
             .filter { it.durationMs > 90_000 }.take(2)
-        InstrumentationRegistry.getArguments().getString("spotifyAccountType")?.let { expected ->
-            assertEquals("The intended account must be connected", expected,
-                spotifyAttribute(SpotifyAccount.transport, session, "type"))
+        val args = InstrumentationRegistry.getArguments()
+        val expectedType = args.getString("spotifyAccountType")
+        val expectedOffline = args.getString("spotifyOfflineEntitlement")
+        if (expectedType != null || expectedOffline != null) {
+            val attributes = spotifyAttributes(SpotifyAccount.transport, session)
+            expectedType?.let { assertEquals("The intended account must be connected", it, attributes["type"]) }
+            expectedOffline?.let {
+                assertEquals("The offline entitlement must come from the real account", it, attributes["offline"])
+                assertNull("Do not override the account attributes for this test", args.getString("spotifyAttributeOverrides"))
+            }
+            Log.i("SpotifeurNativeTest", "Account ${attributeSummary(attributes)}")
         }
         assertEquals(2, tracks.size)
-        InstrumentationRegistry.getArguments().getString("spotifyAttributeOverrides")?.let { overrides ->
+        args.getString("spotifyAttributeOverrides")?.let { overrides ->
             SpotifyNativeRuntime.attributeOverridesForTest = overrides.split(';').filter { '=' in it }
                 .associate { it.substringBefore('=') to it.substringAfter('=') }
         }
@@ -66,7 +111,10 @@ class NativePlaybackSignalTest {
                     override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
                         DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(SignalProbe())).build()
                 }
-                player = ExoPlayer.Builder(app, renderers).build().apply { addAnalyticsListener(PlaybackDiagnostics) }
+                player = ExoPlayer.Builder(app, renderers).build().apply {
+                    volume = 0f
+                    addAnalyticsListener(PlaybackDiagnostics)
+                }
             }
             for ((index, track) in tracks.withIndex()) {
                 withContext(Dispatchers.Main) {

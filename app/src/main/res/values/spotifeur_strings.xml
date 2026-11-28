@@ -85,6 +85,7 @@
     <string name="queue_added">Added to queue</string>
     <string name="queue_next">Playing next</string>
     <string name="radio_preparing">Preparing the radio…</string>
+    <string name="spotify_playback_refused">Spotify couldn’t prepare this track for playback with this account.</string>
     <string name="pin_removed">Removed from home</string>
     <string name="pin_added">Pinned to home</string>
     <string name="timer_end_track">End of track</string>
@@ -96,6 +97,8 @@
     <string name="code_confirm">Confirm code</string>
     <string name="login_user">Email address or username</string>
     <string name="login_email">Email address</string>
+    <string name="login_email_unknown">Spotify found no account linked to this email address. Check the address you use to sign in.</string>
+    <string name="login_email_unknown_after_code">Spotify can send a verification code to this address even when no account is linked to it. Use the email address linked to your Spotify account.</string>
     <string name="login_password">Password</string>
     <string name="login_connecting">Connecting to Spotify…</string>
     <string name="login_with_password">Sign in</string>
@@ -319,6 +322,8 @@
     <string name="settings_player_menu_subtitle">Shows ⋮ at the top right of the player, for the options of the playing track.</string>
     <string name="settings_normalization_title">Normalize volume</string>
     <string name="settings_normalization_subtitle">Plays tracks at a similar loudness, from the values Spotify and YouTube Music publish. Local files are not changed.</string>
+    <string name="settings_skibidisong_title">Skibidisong</string>
+    <string name="settings_skibidisong_subtitle">On a Spotify account that stops each track after a few seconds, Spotify tracks play their YouTube Music recording. Downloads keep that recording.</string>
     <string name="settings_mini_swipe_title">Swipe on the mini player</string>
     <string name="settings_mini_swipe_subtitle">Left and right on the bar at the bottom of the screen.</string>
     <string name="settings_mini_swipe_tracks">Change track (left: next, right: previous)</string>

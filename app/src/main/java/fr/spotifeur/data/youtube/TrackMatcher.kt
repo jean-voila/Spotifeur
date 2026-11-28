@@ -36,6 +36,27 @@ object TrackMatcher {
 
     fun forget(key: String) = preferences?.edit { remove(key) }
 
+    internal fun searchText(query: MatchQuery): String = "${query.title.searchTitle()} ${primaryArtist(query.artists)}".trim()
+
+    /** A second search for the exact recording: the title with its version and every artist (performers in classical music). */
+    internal fun alternateSearchText(query: MatchQuery): String =
+        "${query.title.replace(FEATURING, " ").replace(PUNCTUATION, " ")} ${query.artists.replace(",", " ")}".replace(SPACES, " ").trim()
+
+    /**
+     * Candidates of the songs search, plus the videos search when no song is confident, best score
+     * first (songs keep their small advantage). Throws when neither search answered.
+     */
+    internal fun rankedCandidates(query: MatchQuery, text: String = searchText(query)): List<Pair<Music, Double>> {
+        val songs = runCatching { YouTubeMusic.searchSongs(text) }
+        val scoredSongs = songs.getOrDefault(emptyList()).map { it to score(query, it) + SONG_BONUS }
+        val videos = if ((scoredSongs.maxOfOrNull { it.second } ?: 0.0) >= CONFIDENT) Result.success(emptyList())
+            else runCatching { YouTubeMusic.searchVideos(text) }
+        if (songs.isFailure && videos.isFailure) throw songs.exceptionOrNull() as? java.io.IOException
+            ?: java.io.IOException("YouTube Music search failed.", songs.exceptionOrNull())
+        val scored = scoredSongs + videos.getOrDefault(emptyList()).map { it to score(query, it) }
+        return scored.filter { it.first.youTubeVideoId != null }.distinctBy { it.first.id }.sortedByDescending { it.second }
+    }
+
     /** The candidate with the highest score, if it reaches [ACCEPTED]. Songs get a small advantage over videos. */
     fun bestMatch(query: MatchQuery, songs: List<Music>, videos: List<Music>): Pair<Music, Double>? =
         (songs.map { it to score(query, it) + SONG_BONUS } + videos.map { it to score(query, it) })
@@ -52,6 +73,9 @@ object TrackMatcher {
         val wanted = normalize(query.title + " " + query.album)
         val found = normalize(candidate.title)
         VERSION_WORDS.forEach { word -> if (found.containsWord(word) && !wanted.containsWord(word)) total -= VERSION_PENALTY }
+        // Karaoke, "in the style of" and re-tuned uploads name the original in their title or channel.
+        val described = normalize(candidate.title + " " + candidate.subtitle)
+        if (COVER_MARKERS.any { described.containsWord(it) && !wanted.containsWord(it) }) total -= COVER_PENALTY
         if (query.durationMs > 0 && candidate.durationMs > 0 && kotlin.math.abs(query.durationMs - candidate.durationMs) > 60_000) total -= 0.2
         // Same album name: most likely the same release of the recording.
         if (query.album.isNotBlank() && normalize(query.album) == normalize(candidate.album)) total += ALBUM_BONUS
@@ -108,7 +132,10 @@ object TrackMatcher {
         .replace(FEATURING, " ")
         .trim().ifEmpty { this }
 
-    private fun String.searchTitle(): String = coreTitle()
+    /** The core title, or the whole title when it names a version (live, remix…), so that version is found first. */
+    private fun String.searchTitle(): String =
+        if (SEARCH_VERSION_WORDS.any { normalize(this).containsWord(it) }) replace(FEATURING, " ").replace(PUNCTUATION, " ").replace(SPACES, " ").trim()
+        else coreTitle()
     private fun primaryArtist(artists: String): String = artists.split(",").firstOrNull()?.trim().orEmpty()
 
     private fun String.containsWord(word: String): Boolean =
@@ -147,6 +174,12 @@ object TrackMatcher {
     private const val SONG_BONUS = 0.05
     private const val ALBUM_BONUS = 0.05
     private const val VERSION_PENALTY = 0.25
+    private val PUNCTUATION = Regex("""[()\[\]\-–—/]""")
+    private val SPACES = Regex("""\s+""")
+    private val SEARCH_VERSION_WORDS = listOf("live", "remix", "mix", "acoustic", "extended", "slowed", "sped", "instrumental", "demo", "unplugged", "rework")
+    private val COVER_MARKERS = listOf("karaoke", "in the style of", "made famous", "made popular", "originally performed", "sound a like",
+        "soundalike", "tribute", "as performed by", "432hz", "432 hz")
+    private const val COVER_PENALTY = 0.35
     private val VERSION_WORDS = listOf(
         "live", "remix", "acoustic", "instrumental", "karaoke", "cover", "sped", "slowed", "nightcore",
         "8d", "reverb", "demo", "lyrics", "reaction", "tutorial", "lesson", "edit", "extended",

@@ -85,6 +85,7 @@
     <string name="queue_added">Ajouté à la file d’attente</string>
     <string name="queue_next">Sera lu ensuite</string>
     <string name="radio_preparing">Préparation de la radio…</string>
+    <string name="spotify_playback_refused">Spotify n’a pas pu préparer la lecture de ce titre avec ce compte.</string>
     <string name="pin_removed">Retiré de l’accueil</string>
     <string name="pin_added">Épinglé sur l’accueil</string>
     <string name="timer_end_track">Fin du titre</string>
@@ -96,6 +97,8 @@
     <string name="code_confirm">Confirmer le code</string>
     <string name="login_user">Adresse e-mail ou nom d’utilisateur</string>
     <string name="login_email">Adresse e-mail</string>
+    <string name="login_email_unknown">Spotify ne trouve aucun compte associé à cette adresse. Vérifie l’adresse que tu utilises pour te connecter.</string>
+    <string name="login_email_unknown_after_code">Spotify peut envoyer un code de vérification à une adresse sans compte associé. Utilise l’adresse liée à ton compte Spotify.</string>
     <string name="login_password">Mot de passe</string>
     <string name="login_connecting">Connexion à Spotify…</string>
     <string name="login_with_password">Se connecter</string>
@@ -319,6 +322,8 @@
     <string name="settings_player_menu_subtitle">Affiche ⋮ en haut à droite du lecteur, pour les options du titre en cours.</string>
     <string name="settings_normalization_title">Normaliser le volume</string>
     <string name="settings_normalization_subtitle">Joue les titres à un volume comparable, d’après les valeurs publiées par Spotify et YouTube Music. Les fichiers locaux ne changent pas.</string>
+    <string name="settings_skibidisong_title">Skibidisong</string>
+    <string name="settings_skibidisong_subtitle">Sur un compte Spotify qui arrête chaque titre après quelques secondes, les titres Spotify sont lus depuis leur enregistrement YouTube Music. Les téléchargements gardent cet enregistrement.</string>
     <string name="settings_mini_swipe_title">Balayage du mini-lecteur</string>
     <string name="settings_mini_swipe_subtitle">Vers la gauche ou la droite sur la barre en bas de l’écran.</string>
     <string name="settings_mini_swipe_tracks">Changer de titre (gauche : suivant, droite : précédent)</string>

@@ -18,6 +18,7 @@ import fr.spotifeur.data.HomeLibrary
 import fr.spotifeur.data.LOCAL_PLAYLIST_PREFIX
 import fr.spotifeur.data.LocalLibrary
 import fr.spotifeur.data.LocalPlaylistStore
+import fr.spotifeur.data.Login5EmailUnknown
 import fr.spotifeur.data.MusicKind
 import fr.spotifeur.data.isLocalPlaylist
 import fr.spotifeur.data.isLocalTrack
@@ -150,11 +151,11 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         devicePreferences.edit { putString("id", id) }
     }
     private var pendingCode: CompletableDeferred<String>? = null
-    private val loginFlowId by lazy { UUID.randomUUID().toString() }
     private var remote: SpotifySearch? = null
     private var catalog: SpotifyCatalog? = null
     private var collections: SpotifyLibrary? = null
     private var radio: SpotifyRadio? = null
+    private var radioJob: Job? = null
     private var libraryJob: Job? = null
     private val detailJobs = mutableMapOf<String, Job>()
     private val pendingMutations = mutableSetOf<String>()
@@ -853,12 +854,19 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     }
     fun loadRadio(seed: Music, open: (Music) -> Unit) {
         val source = radio ?: return
-        viewModelScope.launch {
+        val keepCurrent = seed.kind == MusicKind.Track && player.state.value.track?.id == seed.id
+        radioJob?.cancel()
+        radioJob = viewModelScope.launch {
             try {
                 val result = source.station(seed)
+                if (radio !== source) return@launch
                 mutableDetails.update { it + (result.item.id to DetailUi(result)) }
+                if (keepCurrent) {
+                    player.continueWithRadio(seed.id, result.tracks)
+                } else {
+                    play(result.tracks, 0)
+                }
                 open(result.item)
-                play(result.tracks, 0)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { mutableMessage.value = readable(failure) }
         }
@@ -1164,7 +1172,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     fun connectSpotifyEmail(address: String) {
         val email = address.trim()
         if (email.isBlank()) return
-        connect { session -> session.connectEmail(email, loginFlowId) { requestCode(it, email) } }
+        connect { session -> session.connectEmail(email) { requestCode(it, email) } }
     }
 
     /** What Google returned for Spotify's client (code and ID token), read from the redirect before it loads. */
@@ -1207,8 +1215,12 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Tracks shown on screen: in Skibidisong mode they are matched before the rest of the background work. */
+    fun browseTracks(tracks: List<Music>) = fr.spotifeur.data.skibidisong.Skibidisong.browse(tracks)
+
     private fun finishAccount(session: SpotifySession) {
         SpotifyAccount.attach(session)
+        viewModelScope.launch { fr.spotifeur.data.skibidisong.Skibidisong.refreshAccount(session) }
         // A guest who signs in keeps the multi-service playlists; the library now comes from Spotify.
         if (mutableLibrary.value.content?.let { it.playlists.isEmpty() && it.savedTrackCount == 0 } == true) mutableLibrary.value = LibraryUi()
         catalog = SpotifyCatalog(transport, session,
@@ -1277,6 +1289,9 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         if (failure is SpotifyAuthRequired) vault.clear()
         mutableAccount.value = AccountUi(
             error = when (failure) {
+                is Login5EmailUnknown -> app.getString(
+                    if (failure.codeSubmitted) R.string.login_email_unknown_after_code else R.string.login_email_unknown,
+                )
                 is SpotifyFailure -> failure.message
                 is InvalidProtocolBufferException -> "Unexpected Android login response."
                 is IOException -> "The connection to Spotify was interrupted."
@@ -1290,6 +1305,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         pendingCode?.cancel()
         pendingCode = null
         searchJob?.cancel()
+        radioJob?.cancel()
         libraryJob?.cancel()
         detailJobs.values.forEach { it.cancel() }; detailJobs.clear()
         offlineSyncJob?.cancel()

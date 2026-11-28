@@ -4,12 +4,16 @@ import android.os.SystemClock
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.UUID
 
 /** The server does not take this Login5 version or request layout; another version may. */
 internal class Login5ProtocolRefused(message: String) : SpotifyFailure(message)
 
 /** Login5 answered with an error code (`LoginResponse` field 2). */
 internal class Login5Error(message: String, val error: Int, status: Int? = null) : SpotifyFailure(message, status)
+
+internal class Login5EmailUnknown(val codeSubmitted: Boolean) :
+    SpotifyFailure("Spotify found no account linked to this email address.", 401)
 
 internal class StoredCredential(val username: String, val bytes: ByteArray)
 
@@ -25,11 +29,10 @@ internal class Login5(
     suspend fun email(
         clientToken: String,
         email: String,
-        flowId: String,
         code: suspend (Int) -> String,
     ): LoginGrant = exchange(
         clientToken, 111, proto { writeString(1, email) },
-        version = 4, flowId = flowId, requestCode = code,
+        version = 4, flowId = UUID.randomUUID().toString(), requestCode = code,
     )
 
     /**
@@ -145,10 +148,11 @@ internal class Login5(
                         1, 401,
                     )
                     3 -> Login5ProtocolRefused("Spotify rejected Android login protocol v$version.")
-                    5 -> Login5Error(
-                        if (method == GOOGLE_SIGN_IN) "Spotify found no account linked to this Google account."
-                        else "Spotify does not know this account.", 5, 401,
-                    )
+                    5 -> when (method) {
+                        111 -> Login5EmailUnknown(codeSubmitted)
+                        GOOGLE_SIGN_IN -> Login5Error("Spotify found no account linked to this Google account.", 5, 401)
+                        else -> Login5Error("Spotify does not know this account.", 5, 401)
+                    }
                     6, 8 -> SpotifyFailure("Spotify asks to try again later.", 429)
                     else -> Login5Error("Spotify sign-in rejected (code $error).", error)
                 }
