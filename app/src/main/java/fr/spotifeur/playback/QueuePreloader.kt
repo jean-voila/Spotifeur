@@ -276,6 +276,11 @@ internal class PlaybackRecovery(
         if (now - lastFailureAt > STABLE_PLAYBACK_MS) attempts = 0
         lastFailureAt = now
         if (!player.playWhenReady) return
+        // A Spotify track that YouTube Music does not have (Skibidisong mode) is skipped, as Spotify skips unavailable tracks.
+        if (error.isMissingFromYouTubeMusic() && player.hasNextMediaItem()) {
+            retry = scope.launch { player.seekToNextMediaItem(); player.prepare() }
+            return
+        }
         if (!NetworkMonitor.online.value) { skipToAvailable(); return }
         if (error.hasNativePlaybackRefusal()) return
         if (attempts >= MAX_ATTEMPTS || (!error.isConnectionFailure() && !error.hasNativePreparationFailure())) return
@@ -314,6 +319,9 @@ internal class PlaybackRecovery(
 
     private fun PlaybackException.isConnectionFailure() = errorCode in PlaybackException.ERROR_CODE_IO_UNSPECIFIED..PlaybackException.ERROR_CODE_IO_NO_PERMISSION ||
         errorCode == PlaybackException.ERROR_CODE_TIMEOUT
+
+    private fun Throwable.isMissingFromYouTubeMusic(): Boolean = generateSequence(this) { it.cause }.take(12)
+        .any { it is fr.spotifeur.data.youtube.YouTubeFailure && it.status == "NO_MATCH" }
 
     private fun Throwable.hasNativePreparationFailure(): Boolean = generateSequence(this) { it.cause }
         .take(12).any { it is NativeAudioException || it is java.util.concurrent.TimeoutException }

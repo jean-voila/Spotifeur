@@ -2,7 +2,7 @@
 
 ## Do I need a Spotify account?
 
-No. Without an account, Spotifeur plays the YouTube Music catalog and the audio files on your phone, and Spotify tracks of imported playlists play from their closest YouTube Music match. With an account, it shows your Spotify library and uses the quality Spotify grants. On the tested Free account, Spotify playback stopped after about ten seconds once introductory offline access ended. On such an account, Skibidisong mode (on by default, Settings → Playback) plays each Spotify track from its YouTube Music recording, chosen by comparing the start of both recordings, and downloads keep that recording. Settings → Diagnostic report can capture account and playback details for a bug report.
+No. Without an account, Spotifeur plays the YouTube Music catalog and the audio files on your phone, and Spotify tracks of imported playlists play from their closest YouTube Music match. With an account, it shows your Spotify library and uses the quality Spotify grants. On the tested Free account, Spotify playback stopped after about ten seconds once introductory offline access ended. On such an account, Skibidisong mode (on by default, Settings → Playback) plays each Spotify track from its YouTube Music recording, chosen by comparing the start of both recordings, and downloads keep that recording. A track YouTube Music does not have is skipped. Settings → Diagnostic report can capture account and playback details for a bug report.
 
 ## Do I need the official Spotify app installed?
 

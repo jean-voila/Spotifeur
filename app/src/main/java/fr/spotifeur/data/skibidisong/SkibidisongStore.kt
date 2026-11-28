@@ -12,8 +12,10 @@ enum class MatchMethod(val code: Int) {
     Text(0),
     /** The start of both recordings overlaps. */
     Audio(1),
-    /** No candidate overlapped: the first search result was kept. */
-    Fallback(2);
+    /** No candidate overlapped: the first search result with the same title and artist was kept. */
+    Fallback(2),
+    /** Not on YouTube Music: no result has the title and artist. The track is skipped. */
+    Missing(3);
 
     companion object { fun of(code: Int) = entries.firstOrNull { it.code == code } ?: Text }
 }

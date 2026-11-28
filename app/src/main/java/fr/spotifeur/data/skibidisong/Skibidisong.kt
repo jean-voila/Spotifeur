@@ -143,7 +143,7 @@ object Skibidisong {
 
     // Lookups -----------------------------------------------------------------------------------------
 
-    fun knownVideo(trackId: String): String? = if (app == null) null else store.get(trackId)?.videoId
+    fun knownVideo(trackId: String): String? = if (app == null) null else store.get(trackId)?.takeIf { it.method != MatchMethod.Missing }?.videoId
 
     fun matchOf(trackId: String): SkibidisongMatch? = if (app == null) null else store.get(trackId)
 
@@ -159,6 +159,7 @@ object Skibidisong {
         val rates = audio.mapNotNull { it.errorRate }.sorted()
         fun percentile(p: Double) = rates.getOrNull(((rates.size - 1) * p).toInt())?.let { "%.3f".format(it) } ?: "-"
         return "matches=${all.size} audio=${audio.size} fallback=${all.count { it.method == MatchMethod.Fallback }} " +
+            "missing=${all.count { it.method == MatchMethod.Missing }} " +
             "text=${all.count { it.method == MatchMethod.Text }} ber p50=${percentile(0.5)} p90=${percentile(0.9)} p99=${percentile(0.99)} max=${rates.lastOrNull()?.let { "%.3f".format(it) } ?: "-"}"
     }
 
@@ -177,7 +178,7 @@ object Skibidisong {
     fun videoFor(query: MatchQuery): String? {
         store.get(query.key)?.let { stored ->
             if (stored.method == MatchMethod.Text && canCheckAudio()) planRevision.value++
-            return stored.videoId
+            return stored.videoId.takeIf { stored.method != MatchMethod.Missing }
         }
         val started = SystemClock.elapsedRealtime()
         urgent.incrementAndGet()
@@ -192,7 +193,7 @@ object Skibidisong {
             }
             Log.i(TAG, "player waited ${SystemClock.elapsedRealtime() - started} ms for \"${query.title}\" → ${match?.videoId} (${match?.method})" +
                 if (query.key == currentId) " [current]" else "")
-            return match?.videoId
+            return match?.takeIf { it.method != MatchMethod.Missing }?.videoId
         } finally { urgent.decrementAndGet() }
     }
 
@@ -281,7 +282,11 @@ object Skibidisong {
                 if (running[track.id]?.job?.isActive == true) continue
                 if ((retryAfter[track.id] ?: 0) > now) continue
                 val stored = store.get(track.id)
-                if (stored != null && (stored.method != MatchMethod.Text || !audio)) continue
+                // Tracks without an audio match are looked for again after a while (the catalogue grows), and
+                // at once when they were decided by older rules.
+                val uncertain = stored?.method == MatchMethod.Missing || stored?.method == MatchMethod.Fallback
+                val again = uncertain && audio && (System.currentTimeMillis() - stored!!.checkedAt > RECHECK_MS || stored.checkedAt < RULES_CHANGED_AT)
+                if (stored != null && !again && (stored.method != MatchMethod.Text || !audio)) continue
                 return queryOf(track) to audio
             }
         }
@@ -327,55 +332,84 @@ object Skibidisong {
         } else null
         val ranked = try { timed("${tag()} search \"${query.title}\"") { TrackMatcher.rankedCandidates(query) } }
         catch (failure: Exception) { lead?.cancel(); throw failure }
-        if (ranked.isEmpty()) {
-            lead?.cancel()
-            Log.i(TAG, "${tag()} no candidate for \"${query.title}\" / ${query.artists}")
-            return null
-        }
         val candidates = ranked.take(CANDIDATES)
-        Log.d(TAG, "${tag()} candidates \"${query.title}\": " + candidates.joinToString { "${it.first.youTubeVideoId}:${"%.2f".format(it.second)} \"${it.first.title}\"" })
-        val first = candidates.first().first
-        if (lead == null) return save(query, SkibidisongMatch(query.key, first.youTubeVideoId!!, MatchMethod.Text), started, tag())
-        val fallback = SkibidisongMatch(query.key, first.youTubeVideoId!!, MatchMethod.Fallback)
+        Log.d(TAG, "${tag()} candidates \"${query.title}\" (${query.durationMs / 1000} s): " + candidates.joinToString { describe(it) })
+        val seen = LinkedHashMap<String, Pair<Music, Double>>().apply { ranked.forEach { put(it.first.id, it) } }
+        // Text only (mobile data, or no lead-in): the first plausible result, checked by ear once it reaches the queue.
+        fun byText(): SkibidisongMatch? {
+            val choice = fallbackChoice(query, ranked, seen.values) ?: ranked.firstOrNull()?.first ?: return null
+            return save(query, SkibidisongMatch(query.key, choice.youTubeVideoId!!, MatchMethod.Text), started, tag())
+        }
+        if (lead == null) return byText()
         val prints = candidates.map { (candidate, _) -> excerpt(candidate, task, tag) }
         try {
-            prints[0].start()
-            val spotify = lead.await()
-                ?: return save(query, SkibidisongMatch(query.key, first.youTubeVideoId!!, MatchMethod.Text), started, tag())
-            if (spotify.activeFrames < AudioFingerprint.MIN_OVERLAP_FRAMES) {
-                Log.i(TAG, "${tag()} lead-in of \"${query.title}\" too quiet (${spotify.activeFrames} frames): first result kept")
-                return save(query, fallback, started, tag())
-            }
-            judge(query, spotify, candidates, prints, tag())?.let { (candidate, comparison) ->
+            prints.firstOrNull()?.start()
+            val spotify = lead.await() ?: return byText()
+            // A lead-in too quiet to compare still gets the wider searches, so the choice below sees every plausible result.
+            val audible = spotify.activeFrames >= AudioFingerprint.MIN_OVERLAP_FRAMES
+            if (!audible) Log.i(TAG, "${tag()} lead-in of \"${query.title}\" too quiet to compare (${spotify.activeFrames} frames)")
+            if (audible) judge(query, spotify, candidates, prints, tag())?.let { (candidate, comparison) ->
                 return save(query, SkibidisongMatch(query.key, candidate.youTubeVideoId!!, MatchMethod.Audio, comparison.errorRate, comparison.lagMs), started, tag())
             }
-            // One more search for the exact recording: its version words and every artist (the performer in classical music).
-            val alternate = TrackMatcher.alternateSearchText(query)
-            if (alternate.equals(TrackMatcher.searchText(query), ignoreCase = true)) return save(query, fallback, started, tag())
+            // Wider searches for the exact recording, until one is heard: the version words with every artist
+            // (the performer in classical music), the work and its performers, the title without its version
+            // words, the videos shelf (uploads the songs shelf leaves out), and the album.
             val tried = candidates.mapTo(HashSet()) { it.first.id }
-            val more = try { TrackMatcher.rankedCandidates(query, alternate) } catch (failure: IOException) { emptyList() }
-                .filter { it.first.id !in tried }.take(SECOND_SEARCH_CANDIDATES)
-            Log.d(TAG, "${tag()} second search \"$alternate\": " + more.joinToString { "${it.first.youTubeVideoId}:${"%.2f".format(it.second)} \"${it.first.title}\"" })
-            val morePrints = more.map { (candidate, _) -> excerpt(candidate, task, tag) }
-            morePrints.forEach { it.start() }
-            try {
-                judge(query, spotify, more, morePrints, tag())?.let { (candidate, comparison) ->
-                    return save(query, SkibidisongMatch(query.key, candidate.youTubeVideoId!!, MatchMethod.Audio, comparison.errorRate, comparison.lagMs), started, tag())
-                }
-            } finally { morePrints.forEach { it.cancel() } }
-            return save(query, fallback, started, tag())
+            val done = hashSetOf(TrackMatcher.searchText(query).lowercase() to false)
+            val searches = listOfNotNull(
+                TrackMatcher.alternateSearchText(query) to false,
+                TrackMatcher.workSearchText(query)?.let { it to false },
+                TrackMatcher.coreSearchText(query) to false,
+                TrackMatcher.searchText(query) to true,
+                TrackMatcher.albumSearchText(query)?.let { it to false },
+            )
+            for ((text, videos) in searches) {
+                if (tried.size >= MAX_HEARD || !done.add(text.lowercase() to videos)) continue
+                val found = try { TrackMatcher.rankedCandidates(query, text, videosOnly = videos) } catch (failure: IOException) { emptyList() }
+                found.forEach { seen.putIfAbsent(it.first.id, it) }
+                val fresh = found.filter { it.first.id !in tried && it.second > 0 }.take(SECOND_SEARCH_CANDIDATES)
+                Log.d(TAG, "${tag()} wider search${if (videos) " (videos)" else ""} \"$text\": " + fresh.joinToString { describe(it) })
+                if (fresh.isEmpty() || !audible) continue
+                fresh.forEach { tried += it.first.id }
+                val morePrints = fresh.map { (candidate, _) -> excerpt(candidate, task, tag) }
+                morePrints.forEach { it.start() }
+                try {
+                    judge(query, spotify, fresh, morePrints, tag())?.let { (candidate, comparison) ->
+                        return save(query, SkibidisongMatch(query.key, candidate.youTubeVideoId!!, MatchMethod.Audio, comparison.errorRate, comparison.lagMs), started, tag())
+                    }
+                } finally { morePrints.forEach { it.cancel() } }
+            }
+            val choice = fallbackChoice(query, ranked, seen.values)
+                ?: return save(query, SkibidisongMatch(query.key, "", MatchMethod.Missing), started, tag())
+            return save(query, SkibidisongMatch(query.key, choice.youTubeVideoId!!, MatchMethod.Fallback), started, tag())
         } finally { prints.forEach { it.cancel() } }
     }
+
+    private fun fallbackChoice(query: MatchQuery, first: List<Pair<Music, Double>>, all: Collection<Pair<Music, Double>>): Music? =
+        TrackMatcher.fallbackChoice(query, first, all) { it.youTubeVideoId !in unplayable }
+
+    /** Videos that cannot be played without an account (age or sign-in checks), or at all. */
+    private val unplayable: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    private fun describe(candidate: Pair<Music, Double>) = "${candidate.first.youTubeVideoId}:${"%.2f".format(candidate.second)} " +
+        "\"${candidate.first.title}\" / ${candidate.first.subtitle} (${candidate.first.durationMs / 1000} s)"
 
     private fun excerpt(candidate: Music, task: Task, tag: () -> String): Deferred<AudioFingerprint?> = scope.async(start = CoroutineStart.LAZY) {
         try { timed("${tag()} youtube excerpt ${candidate.youTubeVideoId}") { youTubePrint(candidate.youTubeVideoId!!, task) } }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { Log.w(TAG, "${tag()} excerpt ${candidate.youTubeVideoId} failed: ${failure.javaClass.simpleName} ${failure.message}"); null }
+        catch (failure: Exception) {
+            if ((failure as? fr.spotifeur.data.youtube.YouTubeFailure)?.status in UNPLAYABLE_STATUSES) candidate.youTubeVideoId?.let(unplayable::add)
+            Log.w(TAG, "${tag()} excerpt ${candidate.youTubeVideoId} failed: ${failure.javaClass.simpleName} " +
+                "${(failure as? fr.spotifeur.data.youtube.YouTubeFailure)?.status} ${failure.message}")
+            null
+        }
     }
 
     /**
      * Candidates are heard in search order; a clear overlap wins at once. A weaker one (another master,
      * or a remix built on the same recording) lets the other candidates be heard too, and the closest wins.
+     * Another master of the same song can stay just above the threshold: aligned within a second and with
+     * the same title and artist, it still counts.
      */
     private suspend fun judge(
         query: MatchQuery, spotify: AudioFingerprint, candidates: List<Pair<Music, Double>>,
@@ -387,10 +421,13 @@ object Skibidisong {
             if (index == 1) prints.forEach { it.start() }
             val print = prints[index].await() ?: continue
             val comparison = spotify.compare(print)
-            Log.i(TAG, "$tag compare \"${query.title}\" ↔ ${candidate.first.youTubeVideoId} \"${candidate.first.title}\" / ${candidate.first.subtitle}: " +
+            val sameSong = comparison != null && !comparison.matches() && comparison.errorRate <= SAME_SONG_ERROR_RATE &&
+                kotlin.math.abs(comparison.lagMs) <= SAME_SONG_LAG_MS && comparison.frames >= SAME_SONG_FRAMES &&
+                TrackMatcher.sameSong(query, candidate.first)
+            Log.i(TAG, "$tag compare \"${query.title}\" ↔ ${describe(candidate)}: " +
                 "ber=${comparison?.errorRate?.let { "%.3f".format(it) }} mean=${comparison?.meanErrorRate?.let { "%.3f".format(it) }} " +
-                "lag=${comparison?.lagMs}ms frames=${comparison?.frames} text=${"%.2f".format(candidate.second)}")
-            if (comparison == null || !comparison.matches()) continue
+                "lag=${comparison?.lagMs}ms frames=${comparison?.frames}${if (sameSong) " same song, other master" else ""}")
+            if (comparison == null || !(comparison.matches() || sameSong)) continue
             if (comparison.errorRate <= STRONG_MATCH) return candidate.first to comparison
             if (best == null || comparison.errorRate < best.second.errorRate) best = candidate.first to comparison
         }
@@ -405,8 +442,7 @@ object Skibidisong {
         Log.i(TAG, "$tag matched \"${query.title}\" / ${query.artists} → ${match.videoId} ${match.method} in $elapsed ms" +
             (previous?.takeIf { it.videoId != match.videoId }?.let { " (was ${it.videoId})" } ?: ""))
         DiagnosticLog.record("skibidisong", "${match.method} ${elapsed}ms ber=${match.errorRate?.let { "%.2f".format(it) }}")
-        if (store.count() % 25 == 0) Log.i(TAG, "store: ${store.count()} matches, audio=${store.countBy(MatchMethod.Audio)} " +
-            "fallback=${store.countBy(MatchMethod.Fallback)} text=${store.countBy(MatchMethod.Text)}")
+        if (store.count() % 25 == 0) Log.i(TAG, "store: ${summary()}")
         if (previous != null && previous.videoId != match.videoId) {
             app?.let { fr.spotifeur.playback.AudioCache.cache(it).removeResource(fr.spotifeur.playback.YouTubeUris.cacheKey(match.trackId)) }
             mutableCorrections.tryEmit(match.trackId)
@@ -505,8 +541,18 @@ object Skibidisong {
 
     /** Candidates compared by ear: the first search result and the next three. */
     private const val CANDIDATES = 4
-    /** New candidates heard from the second search, before falling back to the first result. */
+    /** New candidates heard from each wider search, and the most heard for one track before falling back. */
     private const val SECOND_SEARCH_CANDIDATES = 3
+    private const val MAX_HEARD = 16
+    /** Another master or re-recording of the same song, aligned with it: measured from 0.36 to 0.42. */
+    private const val SAME_SONG_ERROR_RATE = 0.42
+    private const val SAME_SONG_LAG_MS = 1_500L
+    private const val SAME_SONG_FRAMES = 300
+    private const val RECHECK_MS = 14L * 24 * 3600 * 1000
+    /** When the fallback rules last changed (wider searches, missing tracks): older uncertain matches are made again. */
+    private const val RULES_CHANGED_AT = 1795824000000L
+    private val UNPLAYABLE_STATUSES = setOf("LOGIN_REQUIRED", "UNPLAYABLE", "ERROR", "AGE_CHECK_REQUIRED", "AGE_VERIFICATION_REQUIRED",
+        "CONTENT_CHECK_REQUIRED", "NO_AUDIO_FORMAT", "ALL_CLIENTS_EXCLUDED")
     /** A match this close is taken without hearing the other candidates (same master, other encoding). */
     private const val STRONG_MATCH = 0.20
     /** Tracks after the current one that are always checked by ear, whatever the network. */

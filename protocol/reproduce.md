@@ -124,6 +124,9 @@ adb shell am instrument -w -r -e skibidisong true \
 It checks PCM 20 s into a track, after three seeks, across an automatic transition, after a refusal
 at the encrypted boundary, and from a download without network. `-e skibidisongSurvey 15` reads again
 15 tracks kept without an audio match and logs every comparison (tag `Skibidisong`).
+`-e skibidisongList true` lists the tracks without an audio match and those marked missing, and
+`-e skibidisongTitles 'Overture;Matchistador'` matches again the stored tracks whose title contains
+one of the given words.
 
 `-e spotifyAttributeOverrides 'offline=false;ads=true'` (quoted for the device shell)
 replaces attributes in the engine session only. The request to Spotify still uses the signed-in

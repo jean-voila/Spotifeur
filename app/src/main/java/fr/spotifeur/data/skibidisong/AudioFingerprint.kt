@@ -77,11 +77,11 @@ class AudioFingerprint internal constructor(
         const val BANDS = 33
         const val MIN_HZ = 300.0
         const val MAX_HZ = 2_000.0
-        /** About 2.3 s of audio. */
-        const val MIN_OVERLAP_FRAMES = 200
+        /** About 1.4 s of audio: enough bits for an error rate far from chance. */
+        const val MIN_OVERLAP_FRAMES = 120
         /** Measured on real pairs: same recording well below, other recordings around 0.45 and above. */
         const val MATCH_THRESHOLD = 0.35
-        /** Frames this far under the loudest one (in energy) are treated as silence. */
+        /** Frames this far under the usual level (in energy) are treated as silence. */
         private const val SILENCE_RATIO = 1e-3
 
         private val window = DoubleArray(FRAME) { 0.5 - 0.5 * cos(2 * PI * it / (FRAME - 1)) }
@@ -139,8 +139,10 @@ class AudioFingerprint internal constructor(
                 }
                 bits[frame] = word
             }
-            val loudest = totals.maxOrNull() ?: 0.0
-            val active = BooleanArray(count) { it > 0 && loudest > 0 && totals[it] >= loudest * SILENCE_RATIO }
+            // Relative to the usual level, not to the loudest frame: one accent in a quiet intro
+            // (a cymbal, a clock tick) would otherwise make the rest of it count as silence.
+            val reference = totals.sorted().let { sorted -> sorted.getOrNull((sorted.size * 0.9).toInt().coerceAtMost(sorted.size - 1)) } ?: 0.0
+            val active = BooleanArray(count) { it > 0 && reference > 0 && totals[it] >= reference * SILENCE_RATIO }
             return AudioFingerprint(bits, active)
         }
 

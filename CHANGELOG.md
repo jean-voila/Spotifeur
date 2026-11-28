@@ -4,6 +4,20 @@
 
 Nothing yet.
 
+## v1.7.1
+
+### Fixed
+
+- Skibidisong: when no candidate matches by ear, wider searches look for the exact recording: the title without its version words, the work and its performers (classical titles "Work: movement"), the videos shelf and the album. Studio recordings uploaded as videos ("Official Audio") are found this way; "Fool's Overture" had been replaced by a live recording titled like the studio one.
+- Artist names starting or ending with "-" or "+" ("-M-") were sent as they are, and YouTube Music search read them as "without this word". "Matchistador - Extended" had been replaced by an unrelated video.
+- Without an audio match, the recording kept must have the track's title and artist, and be playable without an account. Classical music is chosen by its credits (every credited artist) and length within 3 s, then any result of the same length. Cyrillic and Latin spellings of an artist are compared ("Катя Лель", "Katya Lel"). A track with no such recording is marked missing and skipped during playback instead of playing another song; it is looked for again after 14 days.
+- Quiet intros (a ticking clock, a heartbeat, a pianissimo opening) were not compared: frames are now counted as silence relative to the usual level of the lead-in (90th percentile), not to its loudest frame, and 1.4 s of compared audio is enough.
+- Another master or a re-recording of the same song, aligned within 1.5 s, with a bit error rate up to 0.42 and the same title and channel artist, counts as a match.
+- Decorated titles (stacked or enclosing marks, braille blanks) are searched as their plain letters; titles made of punctuation alone ("?") are compared as written.
+- Karaoke markers also cover "vocals only", "acapella", "backing track", "piano arrangement" and tab uploads.
+- Tracks without an audio match are matched again in the background after 14 days, and at once when they were decided by earlier versions.
+- Measured on a 1,702-track playlist: tracks without an audio match went from 34 to 12, of which 6 are not on YouTube Music.
+
 ## v1.7.0
 
 ### Added

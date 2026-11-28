@@ -79,4 +79,18 @@ class AudioFingerprintTest {
         val expected = DoubleArray(n) { k -> (0 until n).sumOf { t -> inputRe[t] * kotlin.math.cos(2 * PI * k * t / n) + inputIm[t] * kotlin.math.sin(2 * PI * k * t / n) } }
         for (k in listOf(0, 1, 17, 500, 1023, 2047)) assertEquals(expected[k], re[k], 1e-6)
     }
+
+    /** A quiet intro with one loud accent (a clock tick, a cymbal) is still compared, not taken for silence. */
+    @Test fun quietIntroWithOneAccentIsStillCompared() {
+        fun quiet(rate: Int, seconds: Double, offset: Double, noise: Double) = melody(4, seconds, rate, offsetSeconds = offset, noise = noise, gain = 0.02).also { pcm ->
+            val accent = ((1.0 - offset) * rate).toInt()
+            if (accent in pcm.indices) for (i in accent until minOf(pcm.size, accent + rate / 20)) pcm[i] = (0.9 * kotlin.math.sin(i * 0.3)).toFloat()
+        }
+        val spotify = AudioFingerprint.of(quiet(44_100, 8.0, 0.0, 0.0), 44_100)
+        assertTrue("active ${spotify.activeFrames} of ${spotify.frames}", spotify.activeFrames > spotify.frames * 0.8)
+        val youtube = AudioFingerprint.of(quiet(48_000, 15.0, -0.7, 0.0005), 48_000)
+        val result = spotify.compare(youtube)!!
+        assertTrue("error rate ${result.errorRate}", result.matches())
+        assertTrue("lag ${result.lagMs}", abs(result.lagMs - 700) < 60)
+    }
 }

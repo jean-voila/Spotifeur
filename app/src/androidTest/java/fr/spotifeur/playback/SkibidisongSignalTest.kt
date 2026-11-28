@@ -140,6 +140,32 @@ class SkibidisongSignalTest {
         }
     }
 
+    /** A track YouTube Music does not have is skipped: the next one plays, with sound past its lead-in. */
+    @Test fun missingTrackIsSkipped(): Unit = runBlocking {
+        restrictedAccount()
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val missing = Skibidisong.matches().firstOrNull { it.method == MatchMethod.Missing }
+        assumeTrue("no track marked missing yet", missing != null)
+        val tracks = SpotifyCatalog(SpotifyAccount.transport, SpotifyAccount.require(app))
+            .hydrate(listOf(missing!!.trackId, "spotify:track:1YQWosTIljIvxAgHWTp7KP"))
+        assertEquals(2, tracks.size)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val player = withContext(Dispatchers.Main) { SpotifyPlayer(app, scope) }
+        try {
+            withContext(Dispatchers.Main) { player.play(tracks, 0); player.setVolume(0f) }
+            withTimeout(30_000) { while (player.state.value.track?.id != tracks[1].id) delay(100) }
+            Log.i(TAG, "skipped \"${tracks[0].title}\" / ${tracks[0].subtitle}")
+            delay(20_000)
+            val before = PlaybackDiagnostics.nonSilentBuffers.get()
+            delay(1_500)
+            assertTrue("PCM on the next track", PlaybackDiagnostics.nonSilentBuffers.get() > before)
+            assertTrue("position ${player.state.value.positionMs}", player.state.value.positionMs > 15_000)
+        } finally {
+            withContext(Dispatchers.Main) { player.stop(); player.setVolume(1f); player.close() }
+            scope.cancel()
+        }
+    }
+
     /** A download keeps the full YouTube Music recording, which then plays without network. */
     @Test fun downloadKeepsTheYouTubeRecordingAndPlaysOffline(): Unit = runBlocking {
         restrictedAccount()
@@ -194,6 +220,30 @@ class SkibidisongSignalTest {
             Log.i(TAG, "survey \"${track.title}\" / ${track.subtitle} (${track.durationMs / 1000} s) → ${match?.videoId} ${match?.method} ber=${match?.errorRate}")
         }
         Log.i(TAG, "survey after: ${Skibidisong.summary()}")
+    }
+
+    /** Lists the tracks kept without an audio match, without reading them again. `-e skibidisongList true`. */
+    @Test fun listFallbacks(): Unit = runBlocking {
+        assumeTrue(args.getString("skibidisongList") == "true")
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val matches = Skibidisong.matches().filter { it.method != MatchMethod.Audio }
+        val tracks = SpotifyCatalog(SpotifyAccount.transport, SpotifyAccount.require(app)).hydrate(matches.map { it.trackId })
+        tracks.forEach { track -> Log.i(TAG, "list ${Skibidisong.matchOf(track.id)?.method} | ${track.title} | ${track.subtitle} | ${Skibidisong.matchOf(track.id)?.videoId}") }
+        Log.i(TAG, "list ${Skibidisong.summary()}")
+    }
+
+    /** Matches again the stored tracks whose title contains one of `-e skibidisongTitles a;b`, with every step in the log. */
+    @Test fun matchTitles(): Unit = runBlocking {
+        val titles = args.getString("skibidisongTitles")?.split(';')?.filter(String::isNotBlank)
+        assumeTrue(titles != null)
+        restrictedAccount()
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val all = SpotifyCatalog(SpotifyAccount.transport, SpotifyAccount.require(app)).hydrate(Skibidisong.matches().filter { it.method != MatchMethod.Audio }.map { it.trackId })
+        for (track in all.filter { track -> titles!!.any { track.title.contains(it, ignoreCase = true) } }) {
+            Log.i(TAG, "replay ${track.id} \"${track.title}\" / ${track.subtitle} album=\"${track.album}\" ${track.durationMs} ms, stored ${Skibidisong.matchOf(track.id)}")
+            val match = Skibidisong.matchAgain(MatchQuery(track.id, track.title, track.subtitle, track.durationMs, track.album))
+            Log.i(TAG, "replay result ${match}")
+        }
     }
 
     private companion object { const val TAG = "SkibidisongTest" }
